@@ -1,5 +1,5 @@
 import { Settings, Eye, EyeOff } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AVAILABLE_MODELS } from '../utils/constants';
 import type { ChatSettings } from '../types';
 
@@ -8,9 +8,11 @@ interface SettingsPanelProps {
   onChange: (settings: ChatSettings) => void;
   open: boolean;
   onToggle: () => void;
+  toolEditor?: ReactNode;
+  toolGuide?: ReactNode;
 }
 
-export default function SettingsPanel({ settings, onChange, open, onToggle }: SettingsPanelProps) {
+export default function SettingsPanel({ settings, onChange, open, onToggle, toolEditor, toolGuide }: SettingsPanelProps) {
   const [showKey, setShowKey] = useState(false);
 
   const grouped = AVAILABLE_MODELS.reduce<Record<string, typeof AVAILABLE_MODELS>>((acc, m) => {
@@ -96,6 +98,11 @@ export default function SettingsPanel({ settings, onChange, open, onToggle }: Se
           rows={4}
         />
       </label>
+
+      <div className="settings-divider" />
+
+      {toolGuide}
+      {toolEditor}
     </div>
   );
 }

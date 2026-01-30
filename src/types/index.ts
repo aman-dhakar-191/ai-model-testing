@@ -1,9 +1,12 @@
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   timestamp: number;
   model?: string;
+  toolCalls?: ToolCall[];
+  toolCallId?: string;
+  toolName?: string;
 }
 
 export interface Chat {
@@ -26,4 +29,26 @@ export interface ModelOption {
   id: string;
   name: string;
   provider: string;
+}
+
+export interface ToolParameter {
+  type: string;
+  description: string;
+  enum?: string[];
+}
+
+export interface ToolDefinition {
+  id: string;
+  name: string;
+  description: string;
+  parameters: Record<string, ToolParameter>;
+  required: string[];
+}
+
+export interface ToolCall {
+  id: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
 }

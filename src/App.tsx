@@ -4,10 +4,13 @@ import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import SettingsPanel from './components/SettingsPanel';
 import ExportMenu from './components/ExportMenu';
+import ToolEditor from './components/ToolEditor';
+import ToolGuide from './components/ToolGuide';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { sendMessage } from './utils/api';
+import { executeMockTool } from './utils/mockTools';
 import { DEFAULT_SETTINGS } from './utils/constants';
-import type { Chat, ChatSettings, Message } from './types';
+import type { Chat, ChatSettings, Message, ToolDefinition } from './types';
 
 function generateId() {
   return crypto.randomUUID();
@@ -28,10 +31,17 @@ export default function App() {
   const [chats, setChats] = useLocalStorage<Chat[]>('ai-testing-chats', []);
   const [activeChatId, setActiveChatId] = useLocalStorage<string | null>('ai-testing-active', null);
   const [globalSettings, setGlobalSettings] = useLocalStorage<ChatSettings>('ai-testing-settings', DEFAULT_SETTINGS);
+  const [tools, setTools] = useLocalStorage<ToolDefinition[]>('ai-testing-tools', []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Map of toolCallId -> { name, result } for rendering
+  const [toolResultsMap, setToolResultsMap] = useLocalStorage<Record<string, { name: string; result: string }>>(
+    'ai-testing-tool-results',
+    {},
+  );
 
   const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
 
@@ -101,20 +111,69 @@ export default function App() {
     setLoading(true);
     try {
       const currentSettings = activeChat.settings;
-      const allMessages = [...activeChat.messages, userMessage];
-      const responseContent = await sendMessage(allMessages, currentSettings);
+      let allMessages = [...activeChat.messages, userMessage];
 
-      const assistantMessage: Message = {
-        id: generateId(),
-        role: 'assistant',
-        content: responseContent,
-        timestamp: Date.now(),
-        model: currentSettings.model,
-      };
+      // Loop to handle tool calls — model may call tools, we mock and re-send
+      let maxRounds = 5;
+      const newMessages: Message[] = [userMessage];
+      const newResults: Record<string, { name: string; result: string }> = {};
+
+      while (maxRounds > 0) {
+        maxRounds--;
+        const response = await sendMessage(allMessages, currentSettings, tools.length > 0 ? tools : undefined);
+
+        if (response.toolCalls && response.toolCalls.length > 0) {
+          // Assistant message with tool calls
+          const assistantMsg: Message = {
+            id: generateId(),
+            role: 'assistant',
+            content: response.content || '',
+            timestamp: Date.now(),
+            model: currentSettings.model,
+            toolCalls: response.toolCalls,
+          };
+          newMessages.push(assistantMsg);
+          allMessages = [...allMessages, assistantMsg];
+
+          // Mock execute each tool and create tool result messages
+          for (const call of response.toolCalls) {
+            const mockResult = executeMockTool(call.function.name, call.function.arguments);
+            newResults[call.id] = { name: call.function.name, result: mockResult };
+
+            const toolMsg: Message = {
+              id: generateId(),
+              role: 'tool',
+              content: mockResult,
+              timestamp: Date.now(),
+              toolCallId: call.id,
+              toolName: call.function.name,
+            };
+            newMessages.push(toolMsg);
+            allMessages = [...allMessages, toolMsg];
+          }
+          // Continue loop so model can produce final answer
+        } else {
+          // Final text response
+          const assistantMsg: Message = {
+            id: generateId(),
+            role: 'assistant',
+            content: response.content || 'No response received.',
+            timestamp: Date.now(),
+            model: currentSettings.model,
+          };
+          newMessages.push(assistantMsg);
+          break;
+        }
+      }
+
+      // Persist tool results
+      if (Object.keys(newResults).length > 0) {
+        setToolResultsMap((prev) => ({ ...prev, ...newResults }));
+      }
 
       updateChat(activeChat.id, (c) => ({
         ...c,
-        messages: [...c.messages, userMessage, assistantMessage],
+        messages: [...c.messages, ...newMessages],
         updatedAt: Date.now(),
         title: isFirstMessage ? title : c.title,
       }));
@@ -126,6 +185,7 @@ export default function App() {
   };
 
   const displayChat = chats.find((c) => c.id === activeChatId) ?? null;
+  const resultsMap = new Map(Object.entries(toolResultsMap));
 
   return (
     <div className="app">
@@ -153,6 +213,8 @@ export default function App() {
               onChange={handleSettingsChange}
               open={settingsOpen}
               onToggle={() => setSettingsOpen(!settingsOpen)}
+              toolEditor={<ToolEditor tools={tools} onChange={setTools} />}
+              toolGuide={<ToolGuide />}
             />
           </div>
         </header>
@@ -171,13 +233,16 @@ export default function App() {
               <h2>New Conversation</h2>
               <p>
                 Using <strong>{displayChat.settings.model.split('/').pop()}</strong>.
-                Configure settings or start typing below.
+                {tools.length > 0 && (
+                  <> With <strong>{tools.length} tool{tools.length > 1 ? 's' : ''}</strong> enabled.</>
+                )}
+                {' '}Configure settings or start typing below.
               </p>
             </div>
           ) : (
             <div className="messages-list">
               {displayChat.messages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} />
+                <ChatMessage key={msg.id} message={msg} toolResults={resultsMap} />
               ))}
               {loading && (
                 <div className="chat-message assistant">
