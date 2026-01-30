@@ -329,6 +329,79 @@ body {
   line-height: 1.7;
 }
 
+/* ===== Thinking Block ===== */
+.thinking-block {
+  margin: 6px 0;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-left: 3px solid #eab308;
+  border-radius: var(--radius-sm);
+  background: rgba(234, 179, 8, 0.06);
+  overflow: hidden;
+}
+
+.thinking-block.thinking-streaming {
+  border-color: rgba(234, 179, 8, 0.4);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  color: #eab308;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition);
+}
+
+.thinking-toggle:hover {
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.thinking-label {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.thinking-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.thinking-preview {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.thinking-content {
+  padding: 8px 12px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid rgba(234, 179, 8, 0.15);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.thinking-badge {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
 /* ===== Streaming ===== */
 .streaming-cursor {
   display: inline-block;

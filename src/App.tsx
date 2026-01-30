@@ -11,6 +11,8 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { sendMessageStreaming } from './utils/api';
 import { executeMockTool } from './utils/mockTools';
 import { DEFAULT_SETTINGS } from './utils/constants';
+import { getStreamingThinking, isCurrentlyThinking } from './utils/thinking';
+import ThinkingBlock from './components/ThinkingBlock';
 import type { Chat, ChatSettings, Message, ToolDefinition } from './types';
 
 function generateId() {
@@ -274,31 +276,40 @@ export default function App() {
               {displayChat.messages.map((msg) => (
                 <ChatMessage key={msg.id} message={msg} toolResults={resultsMap} />
               ))}
-              {loading && (
-                <div className="chat-message assistant">
-                  <div className="message-avatar">
-                    {streamingContent ? (
-                      <Bot size={18} />
-                    ) : (
-                      <span className="typing">
-                        <span className="dot" />
-                        <span className="dot" />
-                        <span className="dot" />
-                      </span>
-                    )}
-                  </div>
-                  <div className="message-body">
-                    <div className="message-header">
-                      <span className="message-role">Assistant</span>
-                      <span className="message-model streaming-badge">streaming...</span>
+              {loading && (() => {
+                const streamThinking = streamingContent ? getStreamingThinking(streamingContent) : null;
+                const currentlyThinking = streamingContent ? isCurrentlyThinking(streamingContent) : false;
+                return (
+                  <div className="chat-message assistant">
+                    <div className="message-avatar">
+                      {streamingContent ? (
+                        <Bot size={18} />
+                      ) : (
+                        <span className="typing">
+                          <span className="dot" />
+                          <span className="dot" />
+                          <span className="dot" />
+                        </span>
+                      )}
                     </div>
-                    <div className="message-content">
-                      {streamingContent || 'Thinking...'}
-                      {streamingContent && <span className="streaming-cursor" />}
+                    <div className="message-body">
+                      <div className="message-header">
+                        <span className="message-role">Assistant</span>
+                        <span className="message-model streaming-badge">
+                          {currentlyThinking ? 'thinking...' : 'streaming...'}
+                        </span>
+                      </div>
+                      {streamThinking?.thinking && (
+                        <ThinkingBlock content={streamThinking.thinking} isStreaming={currentlyThinking} />
+                      )}
+                      <div className="message-content">
+                        {streamThinking?.visible || (!streamingContent ? 'Waiting for response...' : '')}
+                        {streamThinking?.visible && !currentlyThinking && <span className="streaming-cursor" />}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               <div ref={messagesEndRef} />
             </div>
           )}
