@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Bot } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
@@ -7,7 +8,7 @@ import ExportMenu from './components/ExportMenu';
 import ToolEditor from './components/ToolEditor';
 import ToolGuide from './components/ToolGuide';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { sendMessage } from './utils/api';
+import { sendMessageStreaming } from './utils/api';
 import { executeMockTool } from './utils/mockTools';
 import { DEFAULT_SETTINGS } from './utils/constants';
 import type { Chat, ChatSettings, Message, ToolDefinition } from './types';
@@ -34,6 +35,7 @@ export default function App() {
   const [tools, setTools] = useLocalStorage<ToolDefinition[]>('ai-testing-tools', []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -109,9 +111,11 @@ export default function App() {
     }));
 
     setLoading(true);
+    setStreamingContent('');
     try {
       const currentSettings = activeChat.settings;
       let allMessages = [...activeChat.messages, userMessage];
+      const hasTools = tools.length > 0;
 
       // Loop to handle tool calls — model may call tools, we mock and re-send
       let maxRounds = 5;
@@ -120,9 +124,21 @@ export default function App() {
 
       while (maxRounds > 0) {
         maxRounds--;
-        const response = await sendMessage(allMessages, currentSettings, tools.length > 0 ? tools : undefined);
+
+        // Use non-streaming for tool call rounds, streaming for the final text response
+        const response = await sendMessageStreaming(
+          allMessages,
+          currentSettings,
+          hasTools ? tools : undefined,
+          (token) => {
+            setStreamingContent((prev) => prev + token);
+          },
+        );
 
         if (response.toolCalls && response.toolCalls.length > 0) {
+          // Reset streaming content for next round
+          setStreamingContent('');
+
           // Assistant message with tool calls
           const assistantMsg: Message = {
             id: generateId(),
@@ -151,9 +167,20 @@ export default function App() {
             newMessages.push(toolMsg);
             allMessages = [...allMessages, toolMsg];
           }
+
+          // Persist intermediate messages so tool calls appear in UI during processing
+          updateChat(activeChat.id, (c) => ({
+            ...c,
+            messages: [...c.messages, ...newMessages],
+            updatedAt: Date.now(),
+            title: isFirstMessage ? title : c.title,
+          }));
+          if (Object.keys(newResults).length > 0) {
+            setToolResultsMap((prev) => ({ ...prev, ...newResults }));
+          }
           // Continue loop so model can produce final answer
         } else {
-          // Final text response
+          // Final text response (already streamed)
           const assistantMsg: Message = {
             id: generateId(),
             role: 'assistant',
@@ -162,6 +189,7 @@ export default function App() {
             model: currentSettings.model,
           };
           newMessages.push(assistantMsg);
+          setStreamingContent('');
           break;
         }
       }
@@ -178,9 +206,11 @@ export default function App() {
         title: isFirstMessage ? title : c.title,
       }));
     } catch (err) {
+      setStreamingContent('');
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
     } finally {
       setLoading(false);
+      setStreamingContent('');
     }
   };
 
@@ -246,13 +276,26 @@ export default function App() {
               ))}
               {loading && (
                 <div className="chat-message assistant">
-                  <div className="message-avatar typing">
-                    <span className="dot" />
-                    <span className="dot" />
-                    <span className="dot" />
+                  <div className="message-avatar">
+                    {streamingContent ? (
+                      <Bot size={18} />
+                    ) : (
+                      <span className="typing">
+                        <span className="dot" />
+                        <span className="dot" />
+                        <span className="dot" />
+                      </span>
+                    )}
                   </div>
                   <div className="message-body">
-                    <div className="message-content">Thinking...</div>
+                    <div className="message-header">
+                      <span className="message-role">Assistant</span>
+                      <span className="message-model streaming-badge">streaming...</span>
+                    </div>
+                    <div className="message-content">
+                      {streamingContent || 'Thinking...'}
+                      {streamingContent && <span className="streaming-cursor" />}
+                    </div>
                   </div>
                 </div>
               )}
