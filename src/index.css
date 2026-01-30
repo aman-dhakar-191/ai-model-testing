@@ -329,6 +329,47 @@ body {
   line-height: 1.7;
 }
 
+/* ===== Thinking Guide Prompts ===== */
+.thinking-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.thinking-prompt-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.thinking-prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(234, 179, 8, 0.06);
+  border-bottom: 1px solid var(--border);
+}
+
+.thinking-prompt-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #eab308;
+}
+
+.thinking-prompt-card .guide-code {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  font-size: 11px;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ===== Thinking Block ===== */
 .thinking-block {
   margin: 6px 0;
