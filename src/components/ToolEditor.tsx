@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Wrench, ChevronDown, ChevronRight, Copy, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Wrench, ChevronDown, ChevronRight, Copy, RotateCcw, FileJson } from 'lucide-react';
 import type { ToolDefinition, ToolParameter } from '../types';
 import { PRESET_TOOLS } from '../utils/mockTools';
 
@@ -197,11 +197,49 @@ export default function ToolEditor({ tools, onChange }: ToolEditorProps) {
     onChange([...tools, ...toAdd]);
   };
 
+  // Bulk JSON editor
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkJson, setBulkJson] = useState('');
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
+  const openBulkEditor = () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const stripped = tools.map(({ id: _id, ...rest }) => rest);
+    setBulkJson(JSON.stringify(stripped, null, 2));
+    setBulkError(null);
+    setBulkMode(true);
+  };
+
+  const saveBulkJson = () => {
+    try {
+      const parsed = JSON.parse(bulkJson);
+      if (!Array.isArray(parsed)) {
+        setBulkError('JSON must be an array of tool definitions.');
+        return;
+      }
+      const imported: ToolDefinition[] = parsed.map((t: Record<string, unknown>) => ({
+        id: generateId(),
+        name: (t.name as string) ?? '',
+        description: (t.description as string) ?? '',
+        parameters: (t.parameters as Record<string, ToolParameter>) ?? {},
+        required: (t.required as string[]) ?? [],
+      }));
+      onChange(imported);
+      setBulkMode(false);
+      setBulkError(null);
+    } catch (e) {
+      setBulkError(e instanceof Error ? e.message : 'Invalid JSON');
+    }
+  };
+
   return (
     <div className="tool-editor">
       <div className="tool-editor-header">
         <h4><Wrench size={14} /> Tools ({tools.length})</h4>
         <div className="tool-editor-actions">
+          <button className="tool-small-btn" onClick={openBulkEditor} title="Edit all tools as JSON array">
+            <FileJson size={13} /> Bulk JSON
+          </button>
           <button className="tool-small-btn" onClick={loadAllPresets} title="Load all preset tools">
             <RotateCcw size={13} /> Presets
           </button>
@@ -210,6 +248,26 @@ export default function ToolEditor({ tools, onChange }: ToolEditorProps) {
           </button>
         </div>
       </div>
+
+      {bulkMode && (
+        <div className="bulk-json-editor">
+          <p className="bulk-json-hint">
+            Edit all tools as a JSON array. Each object needs <code>name</code>, <code>description</code>, <code>parameters</code>, and <code>required</code>.
+          </p>
+          <textarea
+            className="json-textarea"
+            value={bulkJson}
+            onChange={(e) => { setBulkJson(e.target.value); setBulkError(null); }}
+            rows={16}
+            spellCheck={false}
+          />
+          {bulkError && <p className="json-error">{bulkError}</p>}
+          <div className="json-editor-actions">
+            <button className="tool-small-btn" onClick={saveBulkJson}>Save All</button>
+            <button className="tool-small-btn" onClick={() => setBulkMode(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {tools.length === 0 && (
         <div className="tool-empty">

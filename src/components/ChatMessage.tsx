@@ -1,6 +1,8 @@
-import { Bot, User, Wrench } from 'lucide-react';
+import { Bot, User, Wrench, Brain } from 'lucide-react';
 import type { Message } from '../types';
 import ToolCallMessage from './ToolCallMessage';
+import ThinkingBlock from './ThinkingBlock';
+import { parseThinking } from '../utils/thinking';
 
 interface ChatMessageProps {
   message: Message;
@@ -17,6 +19,12 @@ export default function ChatMessage({ message, toolResults }: ChatMessageProps) 
 
   if (isTool) return null;
 
+  const { thinking, response } = !isUser && message.content
+    ? parseThinking(message.content)
+    : { thinking: '', response: message.content };
+
+  const hasThinking = thinking.length > 0;
+
   return (
     <div className={`chat-message ${isUser ? 'user' : 'assistant'}`}>
       <div className="message-avatar">
@@ -28,6 +36,11 @@ export default function ChatMessage({ message, toolResults }: ChatMessageProps) 
           {message.model && !isUser && (
             <span className="message-model">{message.model}</span>
           )}
+          {hasThinking && (
+            <span className="message-badge thinking-badge">
+              <Brain size={11} /> Thought
+            </span>
+          )}
           {message.toolCalls && message.toolCalls.length > 0 && (
             <span className="message-badge tool-badge">
               <Wrench size={11} /> Tool Call
@@ -35,8 +48,9 @@ export default function ChatMessage({ message, toolResults }: ChatMessageProps) 
           )}
           <span className="message-time">{time}</span>
         </div>
-        {message.content && (
-          <div className="message-content">{message.content}</div>
+        {hasThinking && <ThinkingBlock content={thinking} />}
+        {response && (
+          <div className="message-content">{response}</div>
         )}
         {message.toolCalls && message.toolCalls.length > 0 && (
           <ToolCallMessage
