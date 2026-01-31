@@ -58,7 +58,10 @@ function buildApiMessages(messages: Message[], settings: ChatSettings): ApiMessa
       apiMessages.push({
         role: 'assistant',
         content: msg.content || '',
-        tool_calls: msg.toolCalls,
+        tool_calls: msg.toolCalls.map(tc => ({
+          ...tc,
+          type: tc.type || 'function',
+        })),
       });
     } else {
       apiMessages.push({ role: msg.role, content: msg.content });
