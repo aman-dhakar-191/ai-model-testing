@@ -77,7 +77,7 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     },
     body: JSON.stringify(body),
   });
-
+  console.log(`[fetchApi] response: ${response} ${await response.json()}`)
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(
