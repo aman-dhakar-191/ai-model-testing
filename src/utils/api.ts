@@ -106,8 +106,16 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
       const statusCode = response.status;
       let errorMessage = `API request failed with status ${statusCode}`;
       
+      // Log error details for debugging
+      console.group('🚨 API Error Details');
+      console.error('Status Code:', statusCode);
+      console.error('Status Text:', response.statusText);
+      console.error('URL:', response.url);
+      
       try {
         const error = await response.json();
+        console.error('Response Body:', error);
+        
         // Check both error.error.message and error.message patterns
         // Validate that the message is a string to avoid capturing unexpected objects
         if (error?.error?.message && typeof error.error.message === 'string') {
@@ -115,7 +123,11 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
         } else if (error?.message && typeof error.message === 'string') {
           errorMessage = error.message;
         }
-      } catch {
+        
+        console.error('Error Message:', errorMessage);
+      } catch (parseError) {
+        console.error('Failed to parse error response:', parseError);
+        
         // If we can't parse the error response, use status-specific messages
         switch (statusCode) {
           case 400:
@@ -139,7 +151,11 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
           default:
             errorMessage = `API request failed with status ${statusCode}`;
         }
+        
+        console.error('Final Error Message:', errorMessage);
       }
+      
+      console.groupEnd();
       
       throw new ApiError(errorMessage, statusCode);
     }
@@ -153,6 +169,12 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     
     // Handle network errors and other exceptions
     if (error instanceof Error) {
+      console.group('🚨 Network/Fetch Error');
+      console.error('Error Type:', error.constructor.name);
+      console.error('Error Message:', error.message);
+      console.error('Error Stack:', error.stack);
+      console.groupEnd();
+      
       // Check if it's a fetch-specific network error (TypeError is thrown by fetch on network failures)
       if (error instanceof TypeError) {
         throw new NetworkError('Network error: Failed to connect to the API. Please check your internet connection and try again.');
@@ -160,6 +182,8 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
       // For other errors, rethrow as-is
       throw error;
     }
+    
+    console.error('🚨 Unexpected error type:', typeof error, error);
     throw new NetworkError('An unexpected error occurred while connecting to the API.');
   }
 }
@@ -268,8 +292,16 @@ export async function sendMessageStreaming(
     }
     // Handle streaming-specific errors
     if (error instanceof Error) {
+      console.group('🚨 Streaming Error');
+      console.error('Error Type:', error.constructor.name);
+      console.error('Error Message:', error.message);
+      console.error('Error Stack:', error.stack);
+      console.groupEnd();
+      
       throw new Error(`Streaming error: ${error.message}`);
     }
+    
+    console.error('🚨 Unexpected streaming error:', typeof error, error);
     throw new Error('An error occurred while streaming the response.');
   }
 
