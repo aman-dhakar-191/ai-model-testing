@@ -103,7 +103,8 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     });
 
     if (!response.ok) {
-      let errorMessage = `API request failed with status ${response.status}`;
+      const statusCode = response.status || 0;
+      let errorMessage = `API request failed with status ${statusCode}`;
       
       try {
         const error = await response.json();
@@ -115,7 +116,7 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
         }
       } catch {
         // If we can't parse the error response, use status-specific messages
-        switch (response.status) {
+        switch (statusCode) {
           case 400:
             errorMessage = 'Bad Request: The request was invalid. Please check your input and try again.';
             break;
@@ -135,11 +136,11 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
             errorMessage = 'Service Unavailable: The service is temporarily unavailable. Please try again later.';
             break;
           default:
-            errorMessage = `API request failed with status ${response.status}`;
+            errorMessage = `API request failed with status ${statusCode}`;
         }
       }
       
-      throw new ApiError(errorMessage, response.status);
+      throw new ApiError(errorMessage, statusCode);
     }
 
     return response;
