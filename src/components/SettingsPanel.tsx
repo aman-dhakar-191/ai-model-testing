@@ -11,9 +11,10 @@ interface SettingsPanelProps {
   toolEditor?: ReactNode;
   toolGuide?: ReactNode;
   thinkingGuide?: ReactNode;
+  instructionGuide?: ReactNode;
 }
 
-export default function SettingsPanel({ settings, onChange, open, onToggle, toolEditor, toolGuide, thinkingGuide }: SettingsPanelProps) {
+export default function SettingsPanel({ settings, onChange, open, onToggle, toolEditor, toolGuide, thinkingGuide, instructionGuide }: SettingsPanelProps) {
   const [showKey, setShowKey] = useState(false);
 
   const grouped = AVAILABLE_MODELS.reduce<Record<string, typeof AVAILABLE_MODELS>>((acc, m) => {
@@ -103,6 +104,7 @@ export default function SettingsPanel({ settings, onChange, open, onToggle, tool
       <div className="settings-divider" />
 
       {thinkingGuide}
+      {instructionGuide}
       {toolGuide}
       {toolEditor}
     </div>

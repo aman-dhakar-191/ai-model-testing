@@ -8,6 +8,7 @@ import ExportMenu from './components/ExportMenu';
 import ToolEditor from './components/ToolEditor';
 import ToolGuide from './components/ToolGuide';
 import ThinkingGuide from './components/ThinkingGuide';
+import FetchInstructionGuide from './components/FetchInstructionGuide';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { sendMessageStreaming } from './utils/api';
 import { executeMockTool } from './utils/mockTools';
@@ -286,6 +287,7 @@ export default function App() {
               toolEditor={<ToolEditor tools={tools} onChange={setTools} />}
               toolGuide={<ToolGuide />}
               thinkingGuide={<ThinkingGuide />}
+              instructionGuide={<FetchInstructionGuide />}
             />
           </div>
         </header>
