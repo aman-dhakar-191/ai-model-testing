@@ -1,0 +1,32 @@
+[
+  {
+    "id": "apex-best-practices",
+    "filename": "apex-best-practices.md",
+    "title": "Apex Best Practices",
+    "description": "Governor limits, trigger framework, security, naming conventions, testing patterns"
+  },
+  {
+    "id": "pmd-rules",
+    "filename": "pmd-rules.md",
+    "title": "PMD Rules Guide",
+    "description": "Static analysis rules for Apex — CRUD violations, SOQL injection, DML in loops, complexity"
+  },
+  {
+    "id": "lwc-standards",
+    "filename": "lwc-standards.md",
+    "title": "LWC Standards",
+    "description": "Lightning Web Components structure, decorators, wire service, templates, CSS, meta XML"
+  },
+  {
+    "id": "project-structure",
+    "filename": "project-structure.md",
+    "title": "Project Structure Guide",
+    "description": "SFDX project layout, class organization, separation of concerns, naming conventions"
+  },
+  {
+    "id": "fetch-instruction-guide",
+    "filename": "fetch-instruction-guide.md",
+    "title": "Fetch Instruction Tool Guide",
+    "description": "How to use list_instructions and fetch_instruction tools, adding new guides, system prompt integration"
+  }
+]

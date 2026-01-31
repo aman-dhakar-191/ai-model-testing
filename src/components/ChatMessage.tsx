@@ -2,6 +2,7 @@ import { Bot, User, Wrench, Brain } from 'lucide-react';
 import type { Message } from '../types';
 import ToolCallMessage from './ToolCallMessage';
 import ThinkingBlock from './ThinkingBlock';
+import InstructionsUsed from './InstructionsUsed';
 import { parseThinking } from '../utils/thinking';
 
 interface ChatMessageProps {
@@ -24,6 +25,7 @@ export default function ChatMessage({ message, toolResults }: ChatMessageProps) 
     : { thinking: '', response: message.content };
 
   const hasThinking = thinking.length > 0;
+  const hasInstructions = !isUser && message.instructionsUsed && message.instructionsUsed.length > 0;
 
   return (
     <div className={`chat-message ${isUser ? 'user' : 'assistant'}`}>
@@ -48,6 +50,9 @@ export default function ChatMessage({ message, toolResults }: ChatMessageProps) 
           )}
           <span className="message-time">{time}</span>
         </div>
+        {hasInstructions && (
+          <InstructionsUsed instructions={message.instructionsUsed!} />
+        )}
         {hasThinking && <ThinkingBlock content={thinking} />}
         {response && (
           <div className="message-content">{response}</div>
