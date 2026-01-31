@@ -1,6 +1,6 @@
 import { Settings, Eye, EyeOff } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { AVAILABLE_MODELS } from '../utils/constants';
+import { OPENROUTER_MODELS, OLLAMA_MODELS } from '../utils/constants';
 import type { ChatSettings } from '../types';
 
 interface SettingsPanelProps {
@@ -17,10 +17,17 @@ interface SettingsPanelProps {
 export default function SettingsPanel({ settings, onChange, open, onToggle, toolEditor, toolGuide, thinkingGuide, instructionGuide }: SettingsPanelProps) {
   const [showKey, setShowKey] = useState(false);
 
-  const grouped = AVAILABLE_MODELS.reduce<Record<string, typeof AVAILABLE_MODELS>>((acc, m) => {
+  const isOllama = settings.provider === 'ollama';
+  const models = isOllama ? OLLAMA_MODELS : OPENROUTER_MODELS;
+  const grouped = models.reduce<Record<string, typeof models>>((acc, m) => {
     (acc[m.provider] ??= []).push(m);
     return acc;
   }, {});
+
+  const handleProviderChange = (provider: 'openrouter' | 'ollama') => {
+    const newModel = provider === 'ollama' ? 'llama3.1:8b' : 'tngtech/deepseek-r1t2-chimera:free';
+    onChange({ ...settings, provider, model: newModel });
+  };
 
   if (!open) {
     return (
@@ -43,19 +50,45 @@ export default function SettingsPanel({ settings, onChange, open, onToggle, tool
       </div>
 
       <label className="setting-label">
-        API Key
-        <div className="api-key-input">
-          <input
-            type={showKey ? 'text' : 'password'}
-            value={settings.apiKey}
-            onChange={(e) => onChange({ ...settings, apiKey: e.target.value })}
-            placeholder="sk-or-..."
-          />
-          <button className="icon-btn" onClick={() => setShowKey(!showKey)} title={showKey ? 'Hide' : 'Show'}>
-            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        </div>
+        Provider
+        <select
+          value={settings.provider}
+          onChange={(e) => handleProviderChange(e.target.value as 'openrouter' | 'ollama')}
+        >
+          <option value="openrouter">OpenRouter (Cloud)</option>
+          <option value="ollama">Ollama (Local)</option>
+        </select>
       </label>
+
+      {isOllama ? (
+        <label className="setting-label">
+          Ollama Base URL
+          <input
+            type="text"
+            value={settings.ollamaBaseUrl}
+            onChange={(e) => onChange({ ...settings, ollamaBaseUrl: e.target.value })}
+            placeholder="http://localhost:11434"
+          />
+          <small style={{ color: '#666', fontSize: '12px', marginTop: '4px' }}>
+            Make sure Ollama is running locally
+          </small>
+        </label>
+      ) : (
+        <label className="setting-label">
+          API Key
+          <div className="api-key-input">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={settings.apiKey}
+              onChange={(e) => onChange({ ...settings, apiKey: e.target.value })}
+              placeholder="sk-or-..."
+            />
+            <button className="icon-btn" onClick={() => setShowKey(!showKey)} title={showKey ? 'Hide' : 'Show'}>
+              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </label>
+      )}
 
       <label className="setting-label">
         Model

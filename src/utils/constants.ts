@@ -1,6 +1,6 @@
 import type { ModelOption } from '../types';
 
-export const AVAILABLE_MODELS: ModelOption[] = [
+export const OPENROUTER_MODELS: ModelOption[] = [
   // TNG Tech
   { id: 'tngtech/deepseek-r1t2-chimera:free', name: 'DeepSeek R1T2 Chimera', provider: 'TNG Tech' },
   { id: 'tngtech/deepseek-r1t-chimera:free', name: 'DeepSeek R1T Chimera', provider: 'TNG Tech' },
@@ -27,9 +27,27 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   { id: 'upstage/solar-pro-3:free', name: 'Solar Pro 3', provider: 'Upstage' },
 ];
 
+export const OLLAMA_MODELS: ModelOption[] = [
+  // Common Ollama models
+  { id: 'llama3.1:8b', name: 'Llama 3.1 8B', provider: 'Ollama' },
+  { id: 'llama3.2:3b', name: 'Llama 3.2 3B', provider: 'Ollama' },
+  { id: 'llama3.2:1b', name: 'Llama 3.2 1B', provider: 'Ollama' },
+  { id: 'qwen2.5:7b', name: 'Qwen 2.5 7B', provider: 'Ollama' },
+  { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', provider: 'Ollama' },
+  { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', provider: 'Ollama' },
+  { id: 'mistral:7b', name: 'Mistral 7B', provider: 'Ollama' },
+  { id: 'codellama:7b', name: 'Code Llama 7B', provider: 'Ollama' },
+  { id: 'gemma2:9b', name: 'Gemma 2 9B', provider: 'Ollama' },
+  { id: 'phi3:mini', name: 'Phi 3 Mini', provider: 'Ollama' },
+];
+
+export const AVAILABLE_MODELS: ModelOption[] = [...OPENROUTER_MODELS, ...OLLAMA_MODELS];
+
 export const DEFAULT_SETTINGS = {
   model: 'tngtech/deepseek-r1t2-chimera:free',
   systemPrompt: '',
   temperature: 0.7,
   apiKey: '',
+  provider: 'openrouter' as const,
+  ollamaBaseUrl: 'http://localhost:11434',
 };

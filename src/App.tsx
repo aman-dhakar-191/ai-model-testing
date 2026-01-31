@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, RotateCcw } from 'lucide-react';
+import { Bot, RotateCcw, StopCircle } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
@@ -9,10 +9,16 @@ import ToolEditor from './components/ToolEditor';
 import ToolGuide from './components/ToolGuide';
 import ThinkingGuide from './components/ThinkingGuide';
 import FetchInstructionGuide from './components/FetchInstructionGuide';
+import WorkingDirectory from './components/WorkingDirectory';
+import SalesforceOrgManager from './components/SalesforceOrgManager';
+import ProjectSetupModal from './components/ProjectSetupModal';
+import FileExplorer from './components/FileExplorer';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { sendMessageStreaming } from './utils/api';
 import { executeMockTool } from './utils/mockTools';
 import { INSTRUCTION_TOOLS, executeInstructionTool, isInstructionTool } from './utils/instructions';
+import { SALESFORCE_TOOLS, executeSalesforceTool, isSalesforceTool } from './utils/salesforceToolsRenderer';
+import { DEPLOY_TOOLS, executeDeployTool, isDeployTool } from './utils/deployTools';
 import { DEFAULT_SETTINGS } from './utils/constants';
 import { getStreamingThinking, isCurrentlyThinking } from './utils/thinking';
 import ThinkingBlock from './components/ThinkingBlock';
@@ -43,7 +49,9 @@ export default function App() {
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
+  const [showProjectSetup, setShowProjectSetup] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Map of toolCallId -> { name, result } for rendering
   const [toolResultsMap, setToolResultsMap] = useLocalStorage<Record<string, { name: string; result: string }>>(
@@ -52,6 +60,26 @@ export default function App() {
   );
 
   const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
+
+  // Check if current directory is a Salesforce project
+  const checkProject = useCallback(async () => {
+    try {
+      const workingDir = await window.electron.salesforce.getWorkingDirectory();
+      const isProject = await window.electron.sfCli.checkIfSalesforceProject(workingDir);
+      
+      if (!isProject) {
+        setShowProjectSetup(true);
+      } else {
+        setShowProjectSetup(false);
+      }
+    } catch (error) {
+      console.error('Failed to check project status:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkProject();
+  }, [checkProject]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -97,8 +125,8 @@ export default function App() {
     }
   };
 
-  // Combine user tools + built-in instruction tools
-  const allTools = [...INSTRUCTION_TOOLS, ...tools];
+  // Combine user tools + built-in instruction tools + Salesforce tools
+  const allTools = [...INSTRUCTION_TOOLS, ...SALESFORCE_TOOLS, ...DEPLOY_TOOLS, ...tools];
 
   const handleSendMessage = async (content: string) => {
     if (!activeChat) return;
@@ -124,12 +152,14 @@ export default function App() {
 
     setLoading(true);
     setStreamingContent('');
+    abortControllerRef.current = new AbortController();
+
     try {
       const currentSettings = activeChat.settings;
       let allMessages = [...activeChat.messages, userMessage];
 
       let maxRounds = 10;
-      const newMessages: Message[] = [userMessage];
+      const newMessages: Message[] = [];
       const newResults: Record<string, { name: string; result: string }> = {};
       const fetchedInstructions: { guideId: string; title: string }[] = [];
 
@@ -143,6 +173,7 @@ export default function App() {
           (token) => {
             setStreamingContent((prev) => prev + token);
           },
+          abortControllerRef.current.signal,
         );
 
         if (response.toolCalls && response.toolCalls.length > 0) {
@@ -173,6 +204,10 @@ export default function App() {
                   }
                 } catch { /* ignore parse errors */ }
               }
+            } else if (isSalesforceTool(call.function.name)) {
+              result = await executeSalesforceTool(call.function.name, call.function.arguments);
+            } else if (isDeployTool(call.function.name)) {
+              result = await executeDeployTool(call.function.name, call.function.arguments);
             } else {
               result = executeMockTool(call.function.name, call.function.arguments);
             }
@@ -227,11 +262,17 @@ export default function App() {
       }));
     } catch (err) {
       setStreamingContent('');
+      // Check if error is abort error
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Task was interrupted, don't show error
+        return;
+      }
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
       setLastFailedMessage(content);
     } finally {
       setLoading(false);
       setStreamingContent('');
+      abortControllerRef.current = null;
     }
   };
 
@@ -255,6 +296,15 @@ export default function App() {
     setTimeout(() => handleSendMessage(msg), 50);
   };
 
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setLoading(false);
+      setStreamingContent('');
+    }
+  };
+
   const displayChat = chats.find((c) => c.id === activeChatId) ?? null;
   const resultsMap = new Map(Object.entries(toolResultsMap));
 
@@ -267,6 +317,7 @@ export default function App() {
         onNew={handleNewChat}
         onDelete={handleDeleteChat}
       />
+      <FileExplorer />
       <main className="main-area">
         <header className="main-header">
           <div className="header-left">
@@ -278,6 +329,8 @@ export default function App() {
             )}
           </div>
           <div className="header-right">
+            <SalesforceOrgManager />
+            <WorkingDirectory />
             <ExportMenu chat={displayChat} />
             <SettingsPanel
               settings={activeChat?.settings ?? globalSettings}
@@ -370,10 +423,27 @@ export default function App() {
           </div>
         )}
 
+        {loading && (
+          <div className="loading-bar">
+            <span className="loading-text">Processing...</span>
+            <button className="stop-btn" onClick={handleStop} title="Stop current task">
+              <StopCircle size={16} /> Stop
+            </button>
+          </div>
+        )}
+
         {displayChat && (
           <ChatInput onSend={handleSendMessage} disabled={loading} />
         )}
       </main>
+
+      {showProjectSetup && (
+        <ProjectSetupModal onClose={() => {
+          setShowProjectSetup(false);
+          // Re-check project status after a short delay
+          setTimeout(() => checkProject(), 500);
+        }} />
+      )}
     </div>
   );
 }
