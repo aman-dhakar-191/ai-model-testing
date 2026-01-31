@@ -22,6 +22,20 @@ function emptyTool(): ToolDefinition {
   };
 }
 
+// Helper function to validate and fix parameter types
+function validateParameters(params: Record<string, ToolParameter>): Record<string, ToolParameter> {
+  return Object.fromEntries(
+    Object.entries(params).map(([key, param]) => [
+      key,
+      {
+        ...param,
+        type: param.type && param.type.trim() !== '' ? param.type : 'string',
+      },
+    ]),
+  );
+}
+
+
 function ParamEditor({
   params,
   required,
@@ -178,21 +192,10 @@ export default function ToolEditor({ tools, onChange }: ToolEditorProps) {
   const saveJson = (id: string) => {
     try {
       const parsed = JSON.parse(jsonText);
-      const params = parsed.parameters ?? {};
-      // Ensure all parameters have a non-empty type, defaulting to 'string'
-      const validatedParams = Object.fromEntries(
-        Object.entries(params).map(([key, param]) => [
-          key,
-          {
-            ...(param as ToolParameter),
-            type: (param as ToolParameter).type && (param as ToolParameter).type.trim() !== '' ? (param as ToolParameter).type : 'string',
-          },
-        ]),
-      );
       updateTool(id, {
         name: parsed.name ?? '',
         description: parsed.description ?? '',
-        parameters: validatedParams,
+        parameters: validateParameters(parsed.parameters ?? {}),
         required: parsed.required ?? [],
       });
       setJsonMode(null);
@@ -228,26 +231,13 @@ export default function ToolEditor({ tools, onChange }: ToolEditorProps) {
         setBulkError('JSON must be an array of tool definitions.');
         return;
       }
-      const imported: ToolDefinition[] = parsed.map((t: Record<string, unknown>) => {
-        const params = (t.parameters as Record<string, ToolParameter>) ?? {};
-        // Ensure all parameters have a non-empty type, defaulting to 'string'
-        const validatedParams = Object.fromEntries(
-          Object.entries(params).map(([key, param]) => [
-            key,
-            {
-              ...param,
-              type: param.type && param.type.trim() !== '' ? param.type : 'string',
-            },
-          ]),
-        );
-        return {
-          id: generateId(),
-          name: (t.name as string) ?? '',
-          description: (t.description as string) ?? '',
-          parameters: validatedParams,
-          required: (t.required as string[]) ?? [],
-        };
-      });
+      const imported: ToolDefinition[] = parsed.map((t: Record<string, unknown>) => ({
+        id: generateId(),
+        name: (t.name as string) ?? '',
+        description: (t.description as string) ?? '',
+        parameters: validateParameters((t.parameters as Record<string, ToolParameter>) ?? {}),
+        required: (t.required as string[]) ?? [],
+      }));
       onChange(imported);
       setBulkMode(false);
       setBulkError(null);

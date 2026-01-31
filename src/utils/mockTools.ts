@@ -89,17 +89,22 @@ export function executeMockTool(name: string, argsJson: string): string {
 export function toolDefinitionsToApiFormat(tools: ToolDefinition[]) {
   return tools
     .filter((t) => t.name && t.name.trim() !== '') // Filter out tools with empty names
-    .map((t) => ({
-      type: 'function' as const,
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: {
-          type: 'object',
-          properties: Object.fromEntries(
-            Object.entries(t.parameters)
-              .filter(([, param]) => param.type && param.type.trim() !== '') // Filter out params with empty types
-              .map(([key, param]) => [
+    .map((t) => {
+      // Filter parameters to only include those with non-empty types
+      const validParams = Object.fromEntries(
+        Object.entries(t.parameters).filter(([, param]) => param.type && param.type.trim() !== ''),
+      );
+      const validParamKeys = new Set(Object.keys(validParams));
+      
+      return {
+        type: 'function' as const,
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: 'object',
+            properties: Object.fromEntries(
+              Object.entries(validParams).map(([key, param]) => [
                 key,
                 {
                   type: param.type,
@@ -107,9 +112,10 @@ export function toolDefinitionsToApiFormat(tools: ToolDefinition[]) {
                   ...(param.enum ? { enum: param.enum } : {}),
                 },
               ]),
-          ),
-          required: t.required.filter((r) => t.parameters[r] && t.parameters[r].type && t.parameters[r].type.trim() !== ''), // Only include required params that have valid types
+            ),
+            required: t.required.filter((r) => validParamKeys.has(r)), // Only include required params that exist in filtered properties
+          },
         },
-      },
-    }));
+      };
+    });
 }
