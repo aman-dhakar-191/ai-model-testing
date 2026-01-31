@@ -6,6 +6,17 @@ export interface ApiResponse {
   toolCalls: ToolCall[] | null;
 }
 
+// Custom error class to distinguish API errors from other errors
+class ApiError extends Error {
+  statusCode?: number;
+  
+  constructor(message: string, statusCode?: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.statusCode = statusCode;
+  }
+}
+
 interface ApiMessage {
   role: string;
   content: string;
@@ -113,24 +124,18 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
         }
       }
       
-      throw new Error(errorMessage);
+      throw new ApiError(errorMessage, response.status);
     }
 
     return response;
   } catch (error) {
+    // If it's already an ApiError, rethrow it
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    
     // Handle network errors and other exceptions
     if (error instanceof Error) {
-      // If it's already an Error with a message we set, rethrow it
-      if (error.message.includes('API request failed') || 
-          error.message.includes('Bad Request') ||
-          error.message.includes('Unauthorized') ||
-          error.message.includes('Not Found') ||
-          error.message.includes('Too Many Requests') ||
-          error.message.includes('Internal Server Error') ||
-          error.message.includes('Service Unavailable')) {
-        throw error;
-      }
-      // Network error or fetch failed
       throw new Error(`Network error: ${error.message}. Please check your internet connection and try again.`);
     }
     throw new Error('An unexpected error occurred while connecting to the API.');
@@ -244,7 +249,11 @@ export async function sendMessageStreaming(
         }
       }
     } catch (error) {
-      // Handle streaming errors
+      // Don't wrap API errors or network errors - let them propagate as-is
+      if (error instanceof ApiError || (error instanceof Error && error.message.includes('Network error'))) {
+        throw error;
+      }
+      // Handle streaming-specific errors
       if (error instanceof Error) {
         throw new Error(`Streaming error: ${error.message}`);
       }
