@@ -107,8 +107,11 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
       
       try {
         const error = await response.json();
+        // Check both error.error.message and error.message patterns
         if (error?.error?.message) {
           errorMessage = error.error.message;
+        } else if (error?.message) {
+          errorMessage = error.message;
         }
       } catch {
         // If we can't parse the error response, use status-specific messages
