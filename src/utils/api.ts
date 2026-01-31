@@ -103,16 +103,24 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     });
 
     if (!response.ok) {
-      let errorMessage = `API request failed with status ${response.status}`;
+      const statusCode = response.status;
+      let errorMessage = `API request failed with status ${statusCode}`;
+      let parsedErrorResponse = null;
       
       try {
         const error = await response.json();
-        if (error?.error?.message) {
+        parsedErrorResponse = error;
+        
+        // Check both error.error.message and error.message patterns
+        // Validate that the message is a string to avoid capturing unexpected objects
+        if (error?.error?.message && typeof error.error.message === 'string') {
           errorMessage = error.error.message;
+        } else if (error?.message && typeof error.message === 'string') {
+          errorMessage = error.message;
         }
       } catch {
         // If we can't parse the error response, use status-specific messages
-        switch (response.status) {
+        switch (statusCode) {
           case 400:
             errorMessage = 'Bad Request: The request was invalid. Please check your input and try again.';
             break;
@@ -132,11 +140,30 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
             errorMessage = 'Service Unavailable: The service is temporarily unavailable. Please try again later.';
             break;
           default:
-            errorMessage = `API request failed with status ${response.status}`;
+            errorMessage = `API request failed with status ${statusCode}`;
         }
       }
       
-      throw new ApiError(errorMessage, response.status);
+      // Log error details for debugging (only in development)
+      if (import.meta.env.DEV) {
+        console.group('🚨 API Error Details');
+        console.log('Status Code:', statusCode);
+        console.log('Status Text:', response.statusText);
+        // Log only pathname to avoid exposing query parameters
+        try {
+          console.log('Path:', new URL(response.url).pathname);
+        } catch {
+          // If URL parsing fails, log the URL as-is (it's already sanitized by browser)
+          console.log('URL:', response.url);
+        }
+        if (parsedErrorResponse) {
+          console.log('Response Body:', parsedErrorResponse);
+        }
+        console.error('Error Message:', errorMessage);
+        console.groupEnd();
+      }
+      
+      throw new ApiError(errorMessage, statusCode);
     }
 
     return response;
@@ -146,16 +173,29 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
       throw error;
     }
     
-    // Handle network errors and other exceptions
+    // Handle Error objects
     if (error instanceof Error) {
+      // Log network errors (only in development to avoid exposing stack traces)
+      if (import.meta.env.DEV) {
+        console.group('🚨 Network/Fetch Error');
+        console.log('Error Type:', error.constructor.name);
+        console.error('Error Message:', error.message);
+        console.groupEnd();
+      }
+      
       // Check if it's a fetch-specific network error (TypeError is thrown by fetch on network failures)
       if (error instanceof TypeError) {
         throw new NetworkError('Network error: Failed to connect to the API. Please check your internet connection and try again.');
       }
       // For other errors, rethrow as-is
       throw error;
+    } else {
+      // Handle unexpected non-Error objects thrown as errors
+      if (import.meta.env.DEV) {
+        console.error('🚨 Unexpected error type:', typeof error, error);
+      }
+      throw new NetworkError('An unexpected error occurred while connecting to the API.');
     }
-    throw new NetworkError('An unexpected error occurred while connecting to the API.');
   }
 }
 
@@ -261,11 +301,25 @@ export async function sendMessageStreaming(
     if (error instanceof ApiError || error instanceof NetworkError) {
       throw error;
     }
-    // Handle streaming-specific errors
+    
+    // Handle Error objects
     if (error instanceof Error) {
+      // Log streaming errors (only in development)
+      if (import.meta.env.DEV) {
+        console.group('🚨 Streaming Error');
+        console.log('Error Type:', error.constructor.name);
+        console.error('Error Message:', error.message);
+        console.groupEnd();
+      }
+      
       throw new Error(`Streaming error: ${error.message}`);
+    } else {
+      // Handle unexpected non-Error objects thrown as errors
+      if (import.meta.env.DEV) {
+        console.error('🚨 Unexpected streaming error:', typeof error, error);
+      }
+      throw new Error('An error occurred while streaming the response.');
     }
-    throw new Error('An error occurred while streaming the response.');
   }
 
   if (toolCallMap.size > 0) {
