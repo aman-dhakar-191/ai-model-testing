@@ -31,7 +31,6 @@ const __dirname = path.dirname(__filename);
 // │ │ ├── main.js
 // │ │ └── preload.js
 // │
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.env.DIST = path.join(__dirname, '../dist');
 process.env.VITE_PUBLIC = app.isPackaged
   ? process.env.DIST
@@ -39,12 +38,14 @@ process.env.VITE_PUBLIC = app.isPackaged
 
 let win: BrowserWindow | null;
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
+const DIST = process.env.DIST!;
+const VITE_PUBLIC = process.env.VITE_PUBLIC!;
 
 function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(process.env.VITE_PUBLIC, 'vite.svg'),
+    icon: path.join(VITE_PUBLIC, 'vite.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
@@ -61,7 +62,7 @@ function createWindow() {
     win.loadURL(VITE_DEV_SERVER_URL);
     win.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(process.env.DIST, 'index.html'));
+    win.loadFile(path.join(DIST, 'index.html'));
   }
 }
 

@@ -69,7 +69,7 @@ function SingleToolCall({
           {result && (
             <div className="tool-call-section">
               <span className="tool-call-label">Result</span>
-              <pre className="tool-call-code tool-call-result">{formatJson(displayResult)}</pre>
+              <pre className="tool-call-code tool-call-result">{displayResult ? formatJson(displayResult) : 'No result'}</pre>
             </div>
           )}
         </div>

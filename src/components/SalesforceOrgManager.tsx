@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, RefreshCw, LogIn, LogOut, ExternalLink, ChevronDown } from 'lucide-react';
+import { Cloud, RefreshCw, LogIn, ExternalLink, ChevronDown } from 'lucide-react';
 
 interface OrgInfo {
   username: string;

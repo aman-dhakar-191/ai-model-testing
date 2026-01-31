@@ -1,8 +1,8 @@
 {
   "name": "ai-model-testing",
-  "productName": "AI Model Testing",
+  "productName": "Saleesforce Dev Tool",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A desktop application for testing AI models using the OpenRouter API",
   "main": "dist-electron/main.js",
   "type": "module",
@@ -47,7 +47,7 @@
   },
   "build": {
     "appId": "com.ai-model-testing.app",
-    "productName": "AI Model Testing",
+    "productName": "Saleesforce Dev Tool",
     "directories": {
       "output": "release/${version}"
     },
