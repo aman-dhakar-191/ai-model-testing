@@ -94,7 +94,7 @@ function buildRequestBody(
   return body;
 }
 
-async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<Response> {
+async function fetchApi(body: Record<string, unknown>, apiKey: string, signal?: AbortSignal): Promise<Response> {
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -103,6 +103,7 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal,
     });
 
     if (!response.ok) {
@@ -230,6 +231,7 @@ export async function sendMessageStreaming(
   settings: ChatSettings,
   tools: ToolDefinition[] | undefined,
   onToken: (token: string) => void,
+  signal?: AbortSignal,
 ): Promise<ApiResponse> {
   if (!settings.apiKey) {
     throw new Error('Please enter your OpenRouter API key in the settings panel.');
@@ -238,7 +240,7 @@ export async function sendMessageStreaming(
   const apiMessages = buildApiMessages(messages, settings);
   const hasTools = tools && tools.length > 0;
   const body = buildRequestBody(apiMessages, settings, tools, true);
-  const response = await fetchApi(body, settings.apiKey);
+  const response = await fetchApi(body, settings.apiKey, signal);
 
   const reader = response.body?.getReader();
   if (!reader) {

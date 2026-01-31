@@ -19,6 +19,7 @@
     "electron:build:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
+    "@salesforce/cli": "^2.70.9",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -59,8 +60,7 @@
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.developer-tools",
-      "icon": "public/vite.svg"
+      "category": "public.app-category.developer-tools"
     },
     "win": {
       "target": [
@@ -76,16 +76,14 @@
             "x64"
           ]
         }
-      ],
-      "icon": "public/vite.svg"
+      ]
     },
     "linux": {
       "target": [
         "AppImage",
         "tar.gz"
       ],
-      "category": "Development",
-      "icon": "public/vite.svg"
+      "category": "Development"
     },
     "nsis": {
       "oneClick": false,
