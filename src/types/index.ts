@@ -7,6 +7,7 @@ export interface Message {
   toolCalls?: ToolCall[];
   toolCallId?: string;
   toolName?: string;
+  instructionsUsed?: { guideId: string; title: string }[];
 }
 
 export interface Chat {

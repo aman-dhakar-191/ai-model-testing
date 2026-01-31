@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, RotateCcw } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
@@ -11,6 +11,7 @@ import ThinkingGuide from './components/ThinkingGuide';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { sendMessageStreaming } from './utils/api';
 import { executeMockTool } from './utils/mockTools';
+import { INSTRUCTION_TOOLS, executeInstructionTool, isInstructionTool } from './utils/instructions';
 import { DEFAULT_SETTINGS } from './utils/constants';
 import { getStreamingThinking, isCurrentlyThinking } from './utils/thinking';
 import ThinkingBlock from './components/ThinkingBlock';
@@ -40,6 +41,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Map of toolCallId -> { name, result } for rendering
@@ -67,6 +69,7 @@ export default function App() {
     setChats((prev) => [...prev, chat]);
     setActiveChatId(chat.id);
     setError(null);
+    setLastFailedMessage(null);
   };
 
   const handleDeleteChat = (id: string) => {
@@ -79,6 +82,7 @@ export default function App() {
   const handleSelectChat = (id: string) => {
     setActiveChatId(id);
     setError(null);
+    setLastFailedMessage(null);
   };
 
   const handleSettingsChange = (newSettings: ChatSettings) => {
@@ -92,9 +96,13 @@ export default function App() {
     }
   };
 
+  // Combine user tools + built-in instruction tools
+  const allTools = [...INSTRUCTION_TOOLS, ...tools];
+
   const handleSendMessage = async (content: string) => {
     if (!activeChat) return;
     setError(null);
+    setLastFailedMessage(null);
 
     const userMessage: Message = {
       id: generateId(),
@@ -118,31 +126,27 @@ export default function App() {
     try {
       const currentSettings = activeChat.settings;
       let allMessages = [...activeChat.messages, userMessage];
-      const hasTools = tools.length > 0;
 
-      // Loop to handle tool calls — model may call tools, we mock and re-send
-      let maxRounds = 5;
+      let maxRounds = 10;
       const newMessages: Message[] = [userMessage];
       const newResults: Record<string, { name: string; result: string }> = {};
+      const fetchedInstructions: { guideId: string; title: string }[] = [];
 
       while (maxRounds > 0) {
         maxRounds--;
 
-        // Use non-streaming for tool call rounds, streaming for the final text response
         const response = await sendMessageStreaming(
           allMessages,
           currentSettings,
-          hasTools ? tools : undefined,
+          allTools,
           (token) => {
             setStreamingContent((prev) => prev + token);
           },
         );
 
         if (response.toolCalls && response.toolCalls.length > 0) {
-          // Reset streaming content for next round
           setStreamingContent('');
 
-          // Assistant message with tool calls
           const assistantMsg: Message = {
             id: generateId(),
             role: 'assistant',
@@ -154,15 +158,30 @@ export default function App() {
           newMessages.push(assistantMsg);
           allMessages = [...allMessages, assistantMsg];
 
-          // Mock execute each tool and create tool result messages
           for (const call of response.toolCalls) {
-            const mockResult = executeMockTool(call.function.name, call.function.arguments);
-            newResults[call.id] = { name: call.function.name, result: mockResult };
+            let result: string;
+
+            if (isInstructionTool(call.function.name)) {
+              result = await executeInstructionTool(call.function.name, call.function.arguments);
+
+              if (call.function.name === 'fetch_instruction') {
+                try {
+                  const parsed = JSON.parse(result);
+                  if (parsed.title && parsed.guide_id) {
+                    fetchedInstructions.push({ guideId: parsed.guide_id, title: parsed.title });
+                  }
+                } catch { /* ignore parse errors */ }
+              }
+            } else {
+              result = executeMockTool(call.function.name, call.function.arguments);
+            }
+
+            newResults[call.id] = { name: call.function.name, result };
 
             const toolMsg: Message = {
               id: generateId(),
               role: 'tool',
-              content: mockResult,
+              content: result,
               timestamp: Date.now(),
               toolCallId: call.id,
               toolName: call.function.name,
@@ -171,7 +190,6 @@ export default function App() {
             allMessages = [...allMessages, toolMsg];
           }
 
-          // Persist intermediate messages so tool calls appear in UI during processing
           updateChat(activeChat.id, (c) => ({
             ...c,
             messages: [...c.messages, ...newMessages],
@@ -181,15 +199,14 @@ export default function App() {
           if (Object.keys(newResults).length > 0) {
             setToolResultsMap((prev) => ({ ...prev, ...newResults }));
           }
-          // Continue loop so model can produce final answer
         } else {
-          // Final text response (already streamed)
           const assistantMsg: Message = {
             id: generateId(),
             role: 'assistant',
             content: response.content || 'No response received.',
             timestamp: Date.now(),
             model: currentSettings.model,
+            instructionsUsed: fetchedInstructions.length > 0 ? fetchedInstructions : undefined,
           };
           newMessages.push(assistantMsg);
           setStreamingContent('');
@@ -197,7 +214,6 @@ export default function App() {
         }
       }
 
-      // Persist tool results
       if (Object.keys(newResults).length > 0) {
         setToolResultsMap((prev) => ({ ...prev, ...newResults }));
       }
@@ -211,10 +227,31 @@ export default function App() {
     } catch (err) {
       setStreamingContent('');
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+      setLastFailedMessage(content);
     } finally {
       setLoading(false);
       setStreamingContent('');
     }
+  };
+
+  const handleRetry = () => {
+    if (!lastFailedMessage || !activeChat) return;
+
+    updateChat(activeChat.id, (c) => {
+      const messages = [...c.messages];
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+          messages.splice(i, 1);
+          break;
+        }
+      }
+      return { ...c, messages, updatedAt: Date.now() };
+    });
+
+    setError(null);
+    const msg = lastFailedMessage;
+    setLastFailedMessage(null);
+    setTimeout(() => handleSendMessage(msg), 50);
   };
 
   const displayChat = chats.find((c) => c.id === activeChatId) ?? null;
@@ -270,7 +307,7 @@ export default function App() {
                 {tools.length > 0 && (
                   <> With <strong>{tools.length} tool{tools.length > 1 ? 's' : ''}</strong> enabled.</>
                 )}
-                {' '}Configure settings or start typing below.
+                {' '}Instruction guides are always available. Configure settings or start typing below.
               </p>
             </div>
           ) : (
@@ -319,8 +356,15 @@ export default function App() {
 
         {error && (
           <div className="error-bar">
-            {error}
-            <button onClick={() => setError(null)}>&times;</button>
+            <span className="error-text">{error}</span>
+            <div className="error-actions">
+              {lastFailedMessage && (
+                <button className="retry-btn" onClick={handleRetry} title="Retry last message">
+                  <RotateCcw size={14} /> Retry
+                </button>
+              )}
+              <button className="error-close" onClick={() => { setError(null); setLastFailedMessage(null); }}>&times;</button>
+            </div>
           </div>
         )}
 
