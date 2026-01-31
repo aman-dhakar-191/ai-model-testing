@@ -14,6 +14,8 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
+    // Maintains proper prototype chain for instanceof checks
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -22,6 +24,8 @@ export class NetworkError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'NetworkError';
+    // Maintains proper prototype chain for instanceof checks
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
