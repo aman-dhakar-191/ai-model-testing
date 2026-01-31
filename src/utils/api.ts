@@ -17,6 +17,14 @@ class ApiError extends Error {
   }
 }
 
+// Custom error class for network-related errors
+class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}
+
 interface ApiMessage {
   role: string;
   content: string;
@@ -136,9 +144,9 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     
     // Handle network errors and other exceptions
     if (error instanceof Error) {
-      throw new Error(`Network error: ${error.message}. Please check your internet connection and try again.`);
+      throw new NetworkError(`${error.message}. Please check your internet connection and try again.`);
     }
-    throw new Error('An unexpected error occurred while connecting to the API.');
+    throw new NetworkError('An unexpected error occurred while connecting to the API.');
   }
 }
 
@@ -152,24 +160,16 @@ export async function sendMessage(
     throw new Error('Please enter your OpenRouter API key in the settings panel.');
   }
 
-  try {
-    const apiMessages = buildApiMessages(messages, settings);
-    const body = buildRequestBody(apiMessages, settings, tools, false);
-    const response = await fetchApi(body, settings.apiKey);
-    const data = await response.json();
-    const choice = data.choices?.[0]?.message;
+  const apiMessages = buildApiMessages(messages, settings);
+  const body = buildRequestBody(apiMessages, settings, tools, false);
+  const response = await fetchApi(body, settings.apiKey);
+  const data = await response.json();
+  const choice = data.choices?.[0]?.message;
 
-    return {
-      content: choice?.content || null,
-      toolCalls: choice?.tool_calls || null,
-    };
-  } catch (error) {
-    // Re-throw with context if it's not already a user-friendly error
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('Failed to send message. Please try again.');
-  }
+  return {
+    content: choice?.content || null,
+    toolCalls: choice?.tool_calls || null,
+  };
 }
 
 // Streaming send — calls onToken for each text chunk, returns final result
@@ -183,96 +183,88 @@ export async function sendMessageStreaming(
     throw new Error('Please enter your OpenRouter API key in the settings panel.');
   }
 
+  const apiMessages = buildApiMessages(messages, settings);
+  const hasTools = tools && tools.length > 0;
+  const body = buildRequestBody(apiMessages, settings, tools, true);
+  const response = await fetchApi(body, settings.apiKey);
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Streaming not supported by the browser.');
+  }
+
+  const decoder = new TextDecoder();
+  let fullContent = '';
+  let toolCalls: ToolCall[] = [];
+  // Track incremental tool call argument building
+  const toolCallMap = new Map<number, { id: string; function: { name: string; arguments: string } }>();
+  let buffer = '';
+
   try {
-    const apiMessages = buildApiMessages(messages, settings);
-    const hasTools = tools && tools.length > 0;
-    const body = buildRequestBody(apiMessages, settings, tools, true);
-    const response = await fetchApi(body, settings.apiKey);
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('Streaming not supported by the browser.');
-    }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
 
-    const decoder = new TextDecoder();
-    let fullContent = '';
-    let toolCalls: ToolCall[] = [];
-    // Track incremental tool call argument building
-    const toolCallMap = new Map<number, { id: string; function: { name: string; arguments: string } }>();
-    let buffer = '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') continue;
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta;
+          if (!delta) continue;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(data);
-            const delta = parsed.choices?.[0]?.delta;
-            if (!delta) continue;
-
-            // Text content
-            if (delta.content) {
-              fullContent += delta.content;
-              onToken(delta.content);
-            }
-
-            // Tool calls (streamed incrementally)
-            if (hasTools && delta.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index ?? 0;
-                if (!toolCallMap.has(idx)) {
-                  toolCallMap.set(idx, {
-                    id: tc.id ?? `call_${idx}`,
-                    function: { name: tc.function?.name ?? '', arguments: '' },
-                  });
-                }
-                const entry = toolCallMap.get(idx)!;
-                if (tc.id) entry.id = tc.id;
-                if (tc.function?.name) entry.function.name = tc.function.name;
-                if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
-              }
-            }
-          } catch {
-            // Skip malformed JSON lines
+          // Text content
+          if (delta.content) {
+            fullContent += delta.content;
+            onToken(delta.content);
           }
+
+          // Tool calls (streamed incrementally)
+          if (hasTools && delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!toolCallMap.has(idx)) {
+                toolCallMap.set(idx, {
+                  id: tc.id ?? `call_${idx}`,
+                  function: { name: tc.function?.name ?? '', arguments: '' },
+                });
+              }
+              const entry = toolCallMap.get(idx)!;
+              if (tc.id) entry.id = tc.id;
+              if (tc.function?.name) entry.function.name = tc.function.name;
+              if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+            }
+          }
+        } catch {
+          // Skip malformed JSON lines
         }
       }
-    } catch (error) {
-      // Don't wrap API errors or network errors - let them propagate as-is
-      if (error instanceof ApiError || (error instanceof Error && error.message.includes('Network error'))) {
-        throw error;
-      }
-      // Handle streaming-specific errors
-      if (error instanceof Error) {
-        throw new Error(`Streaming error: ${error.message}`);
-      }
-      throw new Error('An error occurred while streaming the response.');
     }
-
-    if (toolCallMap.size > 0) {
-      toolCalls = Array.from(toolCallMap.values());
-    }
-
-    return {
-      content: fullContent || null,
-      toolCalls: toolCalls.length > 0 ? toolCalls : null,
-    };
   } catch (error) {
-    // Re-throw with context if it's not already a user-friendly error
-    if (error instanceof Error) {
+    // Don't wrap API errors or network errors - let them propagate as-is
+    if (error instanceof ApiError || error instanceof NetworkError) {
       throw error;
     }
-    throw new Error('Failed to send streaming message. Please try again.');
+    // Handle streaming-specific errors
+    if (error instanceof Error) {
+      throw new Error(`Streaming error: ${error.message}`);
+    }
+    throw new Error('An error occurred while streaming the response.');
   }
+
+  if (toolCallMap.size > 0) {
+    toolCalls = Array.from(toolCallMap.values());
+  }
+
+  return {
+    content: fullContent || null,
+    toolCalls: toolCalls.length > 0 ? toolCalls : null,
+  };
 }
