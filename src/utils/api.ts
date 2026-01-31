@@ -77,42 +77,22 @@ function buildRequestBody(
   tools?: ToolDefinition[],
   stream?: boolean,
 ): Record<string, unknown> {
-  const isOllama = settings.provider === 'ollama';
-  
-  if (isOllama) {
-    // Ollama format
-    const body: Record<string, unknown> = {
-      model: settings.model,
-      messages: apiMessages,
-      stream: stream || false,
-      options: {
-        temperature: settings.temperature,
-      },
-    };
-    
-    if (tools && tools.length > 0) {
-      body.tools = toolDefinitionsToApiFormat(tools);
-    }
-    
-    return body;
-  } else {
-    // OpenRouter format
-    const body: Record<string, unknown> = {
-      model: settings.model,
-      messages: apiMessages,
-      temperature: settings.temperature,
-    };
+  // Use OpenAI-compatible format for both Ollama and OpenRouter
+  const body: Record<string, unknown> = {
+    model: settings.model,
+    messages: apiMessages,
+    temperature: settings.temperature,
+  };
 
-    if (tools && tools.length > 0) {
-      body.tools = toolDefinitionsToApiFormat(tools);
-    }
-
-    if (stream) {
-      body.stream = true;
-    }
-
-    return body;
+  if (tools && tools.length > 0) {
+    body.tools = toolDefinitionsToApiFormat(tools);
   }
+
+  if (stream) {
+    body.stream = true;
+  }
+
+  return body;
 }
 
 async function fetchApi(
@@ -122,7 +102,7 @@ async function fetchApi(
 ): Promise<Response> {
   const isOllama = settings.provider === 'ollama';
   const url = isOllama 
-    ? `${settings.ollamaBaseUrl}/api/chat`
+    ? `${settings.ollamaBaseUrl}/v1/chat/completions`
     : 'https://openrouter.ai/api/v1/chat/completions';
   
   const headers: Record<string, string> = {
@@ -255,8 +235,8 @@ export async function sendMessage(
   const response = await fetchApi(body, settings);
   const data = await response.json();
   
-  const isOllama = settings.provider === 'ollama';
-  const choice = isOllama ? data.message : data.choices?.[0]?.message;
+  // Both Ollama (with /v1/chat/completions) and OpenRouter use the same format
+  const choice = data.choices?.[0]?.message;
 
   return {
     content: choice?.content || null,
@@ -280,8 +260,6 @@ export async function sendMessageStreaming(
   const hasTools = tools && tools.length > 0;
   const body = buildRequestBody(apiMessages, settings, tools, true);
   const response = await fetchApi(body, settings, signal);
-  
-  const isOllama = settings.provider === 'ollama';
 
   const reader = response.body?.getReader();
   if (!reader) {
@@ -290,7 +268,6 @@ export async function sendMessageStreaming(
 
   const decoder = new TextDecoder();
   let fullContent = '';
-  let toolCalls: ToolCall[] = [];
   // Track incremental tool call argument building
   const toolCallMap = new Map<number, { id: string; function: { name: string; arguments: string } }>();
   let buffer = '';
@@ -308,73 +285,40 @@ export async function sendMessageStreaming(
         const trimmed = line.trim();
         if (!trimmed) continue;
         
-        if (isOllama) {
-          // Ollama format: each line is a complete JSON object
-          try {
-            const parsed = JSON.parse(trimmed);
-            
-            // Text content
-            if (parsed.message?.content) {
-              const content = parsed.message.content;
-              fullContent += content;
-              onToken(content);
-            }
-            
-            // Tool calls
-            if (hasTools && parsed.message?.tool_calls) {
-              for (const tc of parsed.message.tool_calls) {
-                const idx = toolCalls.length;
-                toolCalls.push({
-                  id: tc.id || `call_${idx}`,
-                  function: {
-                    name: tc.function?.name || '',
-                    arguments: tc.function?.arguments || '',
-                  },
+        // Both Ollama (with /v1/chat/completions) and OpenRouter use SSE format with data: prefix
+        if (!trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta;
+          if (!delta) continue;
+
+          // Text content
+          if (delta.content) {
+            fullContent += delta.content;
+            onToken(delta.content);
+          }
+
+          // Tool calls (streamed incrementally)
+          if (hasTools && delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!toolCallMap.has(idx)) {
+                toolCallMap.set(idx, {
+                  id: tc.id ?? `call_${idx}`,
+                  function: { name: tc.function?.name ?? '', arguments: '' },
                 });
               }
+              const entry = toolCallMap.get(idx)!;
+              if (tc.id) entry.id = tc.id;
+              if (tc.function?.name) entry.function.name = tc.function.name;
+              if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
             }
-            
-            // Check if done
-            if (parsed.done) break;
-          } catch {
-            // Skip malformed JSON lines
           }
-        } else {
-          // OpenRouter format: SSE with data: prefix
-          if (!trimmed.startsWith('data: ')) continue;
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(data);
-            const delta = parsed.choices?.[0]?.delta;
-            if (!delta) continue;
-
-            // Text content
-            if (delta.content) {
-              fullContent += delta.content;
-              onToken(delta.content);
-            }
-
-            // Tool calls (streamed incrementally)
-            if (hasTools && delta.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index ?? 0;
-                if (!toolCallMap.has(idx)) {
-                  toolCallMap.set(idx, {
-                    id: tc.id ?? `call_${idx}`,
-                    function: { name: tc.function?.name ?? '', arguments: '' },
-                  });
-                }
-                const entry = toolCallMap.get(idx)!;
-                if (tc.id) entry.id = tc.id;
-                if (tc.function?.name) entry.function.name = tc.function.name;
-                if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
-              }
-            }
-          } catch {
-            // Skip malformed JSON lines
-          }
+        } catch {
+          // Skip malformed JSON lines
         }
       }
     }
@@ -404,9 +348,7 @@ export async function sendMessageStreaming(
     }
   }
 
-  if (!isOllama && toolCallMap.size > 0) {
-    toolCalls = Array.from(toolCallMap.values());
-  }
+  const toolCalls = toolCallMap.size > 0 ? Array.from(toolCallMap.values()) : [];
 
   return {
     content: fullContent || null,

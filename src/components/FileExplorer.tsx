@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Folder, FolderOpen, File, ChevronRight, ChevronDown, RefreshCw } from 'lucide-react';
+import { Folder, FolderOpen, File, ChevronRight, ChevronDown, RefreshCw, FolderPlus } from 'lucide-react';
 import type { FileTreeItem } from '../electron';
 
 interface FileTreeNodeProps {
@@ -99,6 +99,7 @@ const FileExplorer: React.FC = () => {
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [workingDir, setWorkingDir] = useState<string>('');
+  const [isValidProject, setIsValidProject] = useState(false);
 
   useEffect(() => {
     loadFileTree();
@@ -110,12 +111,21 @@ const FileExplorer: React.FC = () => {
       const dir = await window.electron.salesforce.getWorkingDirectory();
       setWorkingDir(dir);
       
-      const treeJson = await window.electron.salesforce.getFileTree();
-      const tree: FileTreeItem[] = JSON.parse(treeJson);
-      setFileTree(tree);
+      // Check if it's a valid Salesforce project
+      const isProject = await window.electron.sfCli.checkIfSalesforceProject(dir);
+      setIsValidProject(isProject);
+      
+      if (isProject) {
+        const treeJson = await window.electron.salesforce.getFileTree();
+        const tree: FileTreeItem[] = JSON.parse(treeJson);
+        setFileTree(tree);
+      } else {
+        setFileTree([]);
+      }
     } catch (error) {
       console.error('Failed to load file tree:', error);
       setFileTree([]);
+      setIsValidProject(false);
     } finally {
       setLoading(false);
     }
@@ -126,6 +136,21 @@ const FileExplorer: React.FC = () => {
     // Future: Implement file opening/viewing
   };
 
+  const handleSelectFolder = async () => {
+    try {
+      setLoading(true);
+      const selectedPath = await window.electron.salesforce.selectFolder();
+      if (selectedPath) {
+        setWorkingDir(selectedPath);
+        await loadFileTree();
+      }
+    } catch (error) {
+      console.error('Failed to select folder:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="file-explorer">
       <div className="file-explorer-header">
@@ -133,14 +158,24 @@ const FileExplorer: React.FC = () => {
           <Folder size={16} />
           <span>Explorer</span>
         </div>
-        <button
-          className="file-explorer-refresh"
-          onClick={loadFileTree}
-          disabled={loading}
-          title="Refresh file tree"
-        >
-          <RefreshCw size={14} className={loading ? 'spinning' : ''} />
-        </button>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            className="file-explorer-refresh"
+            onClick={handleSelectFolder}
+            disabled={loading}
+            title="Open Salesforce project folder"
+          >
+            <FolderPlus size={14} />
+          </button>
+          <button
+            className="file-explorer-refresh"
+            onClick={loadFileTree}
+            disabled={loading}
+            title="Refresh file tree"
+          >
+            <RefreshCw size={14} className={loading ? 'spinning' : ''} />
+          </button>
+        </div>
       </div>
 
       <div className="file-explorer-path" title={workingDir}>
@@ -150,6 +185,25 @@ const FileExplorer: React.FC = () => {
       <div className="file-explorer-tree">
         {loading && fileTree.length === 0 ? (
           <div className="file-explorer-loading">Loading files...</div>
+        ) : !isValidProject ? (
+          <div className="file-explorer-empty">
+            <p>No Salesforce project open</p>
+            <button 
+              onClick={handleSelectFolder}
+              style={{ 
+                marginTop: '8px', 
+                padding: '6px 12px', 
+                background: 'var(--accent)', 
+                border: 'none', 
+                borderRadius: '4px',
+                cursor: 'pointer',
+                color: 'white'
+              }}
+            >
+              <FolderPlus size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+              Open Project Folder
+            </button>
+          </div>
         ) : fileTree.length > 0 ? (
           fileTree.map((item, index) => (
             <FileTreeNode

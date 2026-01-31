@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../types';
+import { errorHandler } from '../services/ErrorHandler';
 
 const REPO_BASE = 'https://raw.githubusercontent.com/aman-dhakar-191/ai-model-testing/main/instruction-guides';
 
@@ -31,20 +32,38 @@ interface GuideIndex {
   description: string;
 }
 
-let cachedIndex: GuideIndex[] | null = null;
+/**
+ * Instruction Service - Manages instruction guide fetching with caching
+ */
+class InstructionService {
+  private cachedIndex: GuideIndex[] | null = null;
+  private cacheTimestamp: number = 0;
+  private cacheMaxAge = 5 * 60 * 1000; // 5 minutes
 
-async function fetchIndex(): Promise<GuideIndex[]> {
-  if (cachedIndex) return cachedIndex;
-  const res = await fetch(`${REPO_BASE}/index.json`);
-  if (!res.ok) throw new Error(`Failed to fetch instruction index: ${res.status}`);
-  cachedIndex = await res.json();
-  return cachedIndex!;
-}
+  async fetchIndex(): Promise<GuideIndex[]> {
+    // Check cache validity
+    if (this.cachedIndex && Date.now() - this.cacheTimestamp < this.cacheMaxAge) {
+      return this.cachedIndex;
+    }
 
-export async function executeInstructionTool(name: string, argsJson: string): Promise<string> {
-  if (name === 'list_instructions') {
     try {
-      const index = await fetchIndex();
+      const res = await fetch(`${REPO_BASE}/index.json`);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch instruction index: ${res.status}`);
+      }
+      
+      this.cachedIndex = await res.json();
+      this.cacheTimestamp = Date.now();
+      return this.cachedIndex!;
+    } catch (error) {
+      errorHandler.handleApiError(error instanceof Error ? error : String(error), true);
+      throw error;
+    }
+  }
+
+  async listInstructions(): Promise<string> {
+    try {
+      const index = await this.fetchIndex();
       return JSON.stringify({
         available_guides: index.map((g) => ({
           id: g.id,
@@ -52,22 +71,24 @@ export async function executeInstructionTool(name: string, argsJson: string): Pr
           description: g.description,
         })),
         usage: 'Call fetch_instruction with a guide_id to load the full guide content.',
+        cached: this.cacheTimestamp > 0,
       });
-    } catch (e) {
-      return JSON.stringify({ error: e instanceof Error ? e.message : 'Failed to list instructions' });
+    } catch (error) {
+      return JSON.stringify({
+        error: error instanceof Error ? error.message : 'Failed to list instructions',
+      });
     }
   }
 
-  if (name === 'fetch_instruction') {
+  async fetchInstruction(guideId: string): Promise<string> {
     try {
-      const args = JSON.parse(argsJson);
-      const guideId = args.guide_id as string;
       if (!guideId) {
         return JSON.stringify({ error: 'guide_id is required' });
       }
 
-      const index = await fetchIndex();
+      const index = await this.fetchIndex();
       const guide = index.find((g) => g.id === guideId);
+      
       if (!guide) {
         return JSON.stringify({
           error: `Guide "${guideId}" not found`,
@@ -77,7 +98,7 @@ export async function executeInstructionTool(name: string, argsJson: string): Pr
 
       const res = await fetch(`${REPO_BASE}/${guide.filename}`);
       if (!res.ok) {
-        return JSON.stringify({ error: `Failed to fetch guide: ${res.status}` });
+        throw new Error(`Failed to fetch guide: ${res.status}`);
       }
 
       const content = await res.text();
@@ -86,12 +107,47 @@ export async function executeInstructionTool(name: string, argsJson: string): Pr
         title: guide.title,
         content,
       });
-    } catch (e) {
-      return JSON.stringify({ error: e instanceof Error ? e.message : 'Failed to fetch instruction' });
+    } catch (error) {
+      errorHandler.handleApiError(error instanceof Error ? error : String(error), true);
+      return JSON.stringify({
+        error: error instanceof Error ? error.message : 'Failed to fetch instruction',
+      });
     }
   }
 
-  return JSON.stringify({ error: `Unknown instruction tool: ${name}` });
+  clearCache(): void {
+    this.cachedIndex = null;
+    this.cacheTimestamp = 0;
+  }
+}
+
+// Singleton instance
+const instructionService = new InstructionService();
+
+/**
+ * Execute instruction tool with improved error handling
+ */
+export async function executeInstructionTool(name: string, argsJson: string): Promise<string> {
+  switch (name) {
+    case 'list_instructions':
+      return await instructionService.listInstructions();
+
+    case 'fetch_instruction': {
+      try {
+        const args = JSON.parse(argsJson);
+        const guideId = args.guide_id as string;
+        return await instructionService.fetchInstruction(guideId);
+      } catch (error) {
+        errorHandler.handleToolError(name, error instanceof Error ? error : String(error), false);
+        return JSON.stringify({
+          error: error instanceof Error ? error.message : 'Failed to parse arguments',
+        });
+      }
+    }
+
+    default:
+      return JSON.stringify({ error: `Unknown instruction tool: ${name}` });
+  }
 }
 
 export function isInstructionTool(name: string): boolean {

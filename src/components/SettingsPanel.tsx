@@ -1,7 +1,7 @@
 import { Settings, Eye, EyeOff } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
-import { OPENROUTER_MODELS, OLLAMA_MODELS } from '../utils/constants';
-import type { ChatSettings } from '../types';
+import { useState, useEffect, type ReactNode } from 'react';
+import { OPENROUTER_MODELS } from '../utils/constants';
+import type { ChatSettings, ModelOption } from '../types';
 
 interface SettingsPanelProps {
   settings: ChatSettings;
@@ -16,16 +16,47 @@ interface SettingsPanelProps {
 
 export default function SettingsPanel({ settings, onChange, open, onToggle, toolEditor, toolGuide, thinkingGuide, instructionGuide }: SettingsPanelProps) {
   const [showKey, setShowKey] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<ModelOption[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   const isOllama = settings.provider === 'ollama';
-  const models = isOllama ? OLLAMA_MODELS : OPENROUTER_MODELS;
-  const grouped = models.reduce<Record<string, typeof models>>((acc, m) => {
-    (acc[m.provider] ??= []).push(m);
-    return acc;
-  }, {});
+
+  // Fetch Ollama models when provider changes to Ollama
+  useEffect(() => {
+    if (isOllama && ollamaModels.length === 0) {
+      setLoadingModels(true);
+      window.electron.ollama.listModels()
+        .then(modelNames => {
+          const models: ModelOption[] = modelNames.map(name => ({
+            id: name,
+            name: name,
+            provider: 'Ollama'
+          }));
+          setOllamaModels(models);
+          
+          // If current model is not in the list, select the first available model
+          if (models.length > 0 && !modelNames.includes(settings.model)) {
+            onChange({ ...settings, model: models[0].id });
+          }
+        })
+        .catch(err => {
+          console.error('Failed to fetch Ollama models:', err);
+          setOllamaModels([]);
+        })
+        .finally(() => setLoadingModels(false));
+    }
+  }, [isOllama, ollamaModels.length, settings, onChange]);
+
+  const models = isOllama ? ollamaModels : OPENROUTER_MODELS;
 
   const handleProviderChange = (provider: 'openrouter' | 'ollama') => {
-    const newModel = provider === 'ollama' ? 'llama3.1:8b' : 'tngtech/deepseek-r1t2-chimera:free';
+    let newModel: string;
+    if (provider === 'ollama') {
+      // Use first available Ollama model or empty string
+      newModel = ollamaModels.length > 0 ? ollamaModels[0].id : '';
+    } else {
+      newModel = 'tngtech/deepseek-r1t2-chimera:free';
+    }
     onChange({ ...settings, provider, model: newModel });
   };
 
@@ -95,16 +126,19 @@ export default function SettingsPanel({ settings, onChange, open, onToggle, tool
         <select
           value={settings.model}
           onChange={(e) => onChange({ ...settings, model: e.target.value })}
+          disabled={isOllama && loadingModels}
         >
-          {Object.entries(grouped).map(([provider, models]) => (
-            <optgroup key={provider} label={provider}>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
+          {isOllama && loadingModels ? (
+            <option>Loading models...</option>
+          ) : isOllama && ollamaModels.length === 0 ? (
+            <option>No models found. Run: ollama pull &lt;model&gt;</option>
+          ) : (
+            models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))
+          )}
         </select>
       </label>
 
@@ -122,16 +156,6 @@ export default function SettingsPanel({ settings, onChange, open, onToggle, tool
           <span>Precise (0)</span>
           <span>Creative (2)</span>
         </div>
-      </label>
-
-      <label className="setting-label">
-        System Prompt
-        <textarea
-          value={settings.systemPrompt}
-          onChange={(e) => onChange({ ...settings, systemPrompt: e.target.value })}
-          placeholder="You are a helpful assistant..."
-          rows={4}
-        />
       </label>
 
       <div className="settings-divider" />

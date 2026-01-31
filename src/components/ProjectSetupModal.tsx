@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FolderOpen, FolderPlus, X } from 'lucide-react';
 
 interface ProjectSetupModalProps {
-  onClose: () => void;
+  onClose: (options?: { dontShowAgain?: boolean; projectDir?: string }) => void;
 }
 
 const ProjectSetupModal: React.FC<ProjectSetupModalProps> = ({ onClose }) => {
@@ -10,6 +10,7 @@ const ProjectSetupModal: React.FC<ProjectSetupModalProps> = ({ onClose }) => {
   const [template, setTemplate] = useState<'standard' | 'empty' | 'analytics'>('standard');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   const handleCreateProject = async () => {
     if (!projectName.trim()) {
@@ -38,7 +39,7 @@ const ProjectSetupModal: React.FC<ProjectSetupModalProps> = ({ onClose }) => {
       // Change working directory by calling selectFolder is not ideal,
       // we need to manually change directory. For now, notify user and reload.
       alert(`Project '${projectName}' created successfully in ${newProjectPath}!\n\nPlease use the folder icon in the header to navigate to the new project folder.`);
-      onClose();
+      onClose({ dontShowAgain, projectDir: newProjectPath });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create project');
     } finally {
@@ -62,7 +63,7 @@ const ProjectSetupModal: React.FC<ProjectSetupModalProps> = ({ onClose }) => {
       
       if (isProject) {
         // Directory was already changed by selectFolder, now close and refresh
-        onClose();
+        onClose({ dontShowAgain, projectDir: selectedPath });
         // Delay to ensure state is updated
         setTimeout(() => {
           window.location.reload();
@@ -77,12 +78,16 @@ const ProjectSetupModal: React.FC<ProjectSetupModalProps> = ({ onClose }) => {
     }
   };
 
+  const handleSkip = () => {
+    onClose({ dontShowAgain: true });
+  };
+
   return (
     <div className="modal-overlay">
       <div className="modal-content">
         <div className="modal-header">
           <h2>Salesforce Project Setup</h2>
-          <button className="modal-close" onClick={onClose} disabled={loading}>
+          <button className="modal-close" onClick={() => onClose({ dontShowAgain })} disabled={loading}>
             <X size={20} />
           </button>
         </div>
@@ -153,6 +158,26 @@ const ProjectSetupModal: React.FC<ProjectSetupModalProps> = ({ onClose }) => {
               disabled={loading}
             >
               {loading ? 'Opening...' : 'Browse for Project'}
+            </button>
+          </div>
+
+          <div className="modal-footer">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={dontShowAgain}
+                onChange={(e) => setDontShowAgain(e.target.checked)}
+                disabled={loading}
+              />
+              <span>Don't show this dialog again on startup</span>
+            </label>
+            
+            <button
+              className="modal-button text"
+              onClick={handleSkip}
+              disabled={loading}
+            >
+              Skip for now
             </button>
           </div>
         </div>

@@ -45,6 +45,9 @@ export interface ElectronAPI {
     quickDeploy: (jobId: string, targetOrg?: string) => Promise<string>;
     retrieveMetadata: (sourcePath: string, targetOrg?: string) => Promise<string>;
   };
+  ollama: {
+    listModels: () => Promise<string[]>;
+  };
   send: (channel: string, data: unknown) => void;
   receive: (channel: string, func: (...args: unknown[]) => void) => void;
 }

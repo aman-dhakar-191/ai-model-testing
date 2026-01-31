@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import os from 'node:os';
 import { executeSalesforceTool } from '../src/utils/salesforceTools';
 import { listFilesRecursive } from '../src/utils/fileOperations';
 import {
@@ -22,6 +24,37 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Path to store the last working directory
+const CONFIG_DIR = path.join(os.homedir(), '.salesforce-dev-tool');
+const LAST_DIR_FILE = path.join(CONFIG_DIR, 'last-working-directory.txt');
+
+// Helper functions for working directory persistence
+function saveLastWorkingDirectory(directory: string) {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    }
+    fs.writeFileSync(LAST_DIR_FILE, directory, 'utf-8');
+  } catch (error) {
+    console.error('Failed to save last working directory:', error);
+  }
+}
+
+function loadLastWorkingDirectory(): string | null {
+  try {
+    if (fs.existsSync(LAST_DIR_FILE)) {
+      const savedDir = fs.readFileSync(LAST_DIR_FILE, 'utf-8').trim();
+      // Check if the directory still exists
+      if (savedDir && fs.existsSync(savedDir)) {
+        return savedDir;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load last working directory:', error);
+  }
+  return null;
+}
+
 // The built directory structure
 //
 // ├─┬─┬ dist
@@ -40,6 +73,17 @@ let win: BrowserWindow | null;
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 const DIST = process.env.DIST!;
 const VITE_PUBLIC = process.env.VITE_PUBLIC!;
+
+// Restore last working directory on startup
+const lastWorkingDir = loadLastWorkingDirectory();
+if (lastWorkingDir) {
+  try {
+    process.chdir(lastWorkingDir);
+    console.log('Restored working directory:', lastWorkingDir);
+  } catch (error) {
+    console.error('Failed to restore working directory:', error);
+  }
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -100,6 +144,20 @@ ipcMain.handle('sf-get-working-directory', () => {
   return process.cwd();
 });
 
+ipcMain.handle('sf-set-working-directory', async (_event, directory: string) => {
+  try {
+    if (fs.existsSync(directory)) {
+      process.chdir(directory);
+      saveLastWorkingDirectory(directory);
+      return directory;
+    } else {
+      throw new Error('Directory does not exist');
+    }
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('Failed to set working directory');
+  }
+});
+
 ipcMain.handle('sf-get-file-tree', async (_event, dirPath?: string) => {
   try {
     const targetPath = dirPath || process.cwd();
@@ -120,6 +178,7 @@ ipcMain.handle('sf-select-folder', async () => {
   if (!result.canceled && result.filePaths.length > 0) {
     const selectedPath = result.filePaths[0];
     process.chdir(selectedPath);
+    saveLastWorkingDirectory(selectedPath);
     return selectedPath;
   }
   
@@ -232,6 +291,31 @@ ipcMain.handle('sf-retrieve-metadata', async (_event, sourcePath: string, target
     return JSON.stringify(result);
   } catch (error) {
     throw error instanceof Error ? error : new Error('Failed to retrieve metadata');
+  }
+});
+
+// IPC handler for Ollama models
+ipcMain.handle('ollama-list-models', async () => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    const { stdout } = await execAsync('ollama list');
+    const lines = stdout.trim().split('\n');
+    
+    // Skip header line and parse model names
+    const models = lines.slice(1)
+      .map(line => {
+        const match = line.match(/^(\S+)/);
+        return match ? match[1] : null;
+      })
+      .filter((name): name is string => name !== null);
+    
+    return models;
+  } catch (error) {
+    console.error('Failed to list Ollama models:', error);
+    return [];
   }
 });
 

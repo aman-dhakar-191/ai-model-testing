@@ -66,6 +66,18 @@ export default function ToolGuide() {
           </section>
 
           <section>
+            <h5>Tool Usage Best Practices</h5>
+            <ul>
+              <li><strong>Before creating files:</strong> Use <code>list_files</code> to check if file already exists</li>
+              <li><strong>Before editing files:</strong> Use <code>read_file</code> to understand current content</li>
+              <li><strong>Before creating components:</strong> Use <code>list_files</code> to check existing components and avoid duplicates</li>
+              <li><strong>Directory structure:</strong> Always use proper Salesforce paths like <code>force-app/main/default/classes</code></li>
+              <li><strong>Validation before deployment:</strong> Use <code>sf_validate_deploy</code> before <code>sf_deploy_metadata</code></li>
+              <li><strong>Sequential operations:</strong> List → Read → Create/Edit → Validate → Deploy</li>
+            </ul>
+          </section>
+
+          <section>
             <h5>Tips</h5>
             <ul>
               <li>Use <strong>Presets</strong> to quickly load example tools</li>

@@ -687,9 +687,20 @@ async function listFilesHandler(args: any): Promise<string> {
   const result = listDirectory(dirPath);
 
   if (result.error) {
+    // Provide helpful suggestions for common Salesforce paths
+    let suggestion = '';
+    const dir = args.directory.toLowerCase();
+    if (dir === 'classes' || dir.endsWith('/classes') || dir.endsWith('\\classes')) {
+      suggestion = ' Did you mean "force-app/main/default/classes"?';
+    } else if (dir === 'lwc' || dir.endsWith('/lwc') || dir.endsWith('\\lwc')) {
+      suggestion = ' Did you mean "force-app/main/default/lwc"?';
+    } else if (dir === 'triggers' || dir.endsWith('/triggers') || dir.endsWith('\\triggers')) {
+      suggestion = ' Did you mean "force-app/main/default/triggers"?';
+    }
+    
     return JSON.stringify({
       status: 'error',
-      message: result.error,
+      message: result.error + suggestion,
       directory: args.directory,
     });
   }

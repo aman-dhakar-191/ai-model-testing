@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electron', {
     executeTool: (toolName: string, argsJson: string) => 
       ipcRenderer.invoke('sf-execute-tool', toolName, argsJson),
     getWorkingDirectory: () => ipcRenderer.invoke('sf-get-working-directory'),
+    setWorkingDirectory: (directory: string) => ipcRenderer.invoke('sf-set-working-directory', directory),
     getFileTree: (dirPath?: string) => ipcRenderer.invoke('sf-get-file-tree', dirPath),
     selectFolder: () => ipcRenderer.invoke('sf-select-folder'),
   },
@@ -32,6 +33,11 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('sf-deploy-quick', jobId, targetOrg),
     retrieveMetadata: (sourcePath: string, targetOrg?: string) =>
       ipcRenderer.invoke('sf-retrieve-metadata', sourcePath, targetOrg),
+  },
+  
+  // Ollama operations
+  ollama: {
+    listModels: () => ipcRenderer.invoke('ollama-list-models'),
   },
   
   // Example: Send message to main process

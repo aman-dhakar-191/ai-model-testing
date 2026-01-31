@@ -200,7 +200,7 @@ export async function validateDeploy(
   testLevel: 'NoTestRun' | 'RunSpecifiedTests' | 'RunLocalTests' | 'RunAllTestsInOrg' = 'NoTestRun',
   tests?: string[]
 ): Promise<{ success: boolean; message: string; details?: any }> {
-  const targetFlag = targetOrg ? `--target-org ${targetOrg}` : '';
+  const targetFlag = `--target-org ${targetOrg || 'default'}`;
   const testLevelFlag = `--test-level ${testLevel}`;
   const testsFlag = tests && tests.length > 0 ? `--tests ${tests.join(',')}` : '';
   
@@ -241,7 +241,7 @@ export async function deployMetadata(
   tests?: string[],
   checkOnly: boolean = false
 ): Promise<{ success: boolean; message: string; deployId?: string; details?: any }> {
-  const targetFlag = targetOrg ? `--target-org ${targetOrg}` : '';
+  const targetFlag = `--target-org ${targetOrg || 'default'}`;
   const testLevelFlag = `--test-level ${testLevel}`;
   const testsFlag = tests && tests.length > 0 ? `--tests ${tests.join(',')}` : '';
   const checkOnlyFlag = checkOnly ? '--dry-run' : '';
@@ -267,9 +267,39 @@ export async function deployMetadata(
       };
     }
   } catch (error: any) {
+    // Keep the full error but try to extract the meaningful part
+    let errorMessage = error.message || 'Unknown deployment error';
+    let fullOutput = errorMessage; // Keep full output for details
+    
+    // Try to extract the actual SF CLI JSON error if present
+    try {
+      const stderrMatch = errorMessage.match(/Stderr:\s*([\s\S]+)$/);
+      if (stderrMatch) {
+        const stderr = stderrMatch[1];
+        // Remove common warnings but keep the actual error
+        const cleanedStderr = stderr
+          .replace(/Warning: Could not find typescript[\s\S]*?Falling back to compiled source\.\n/g, '')
+          .replace(/\(node:\d+\) Error Plugin[\s\S]*?See more details with DEBUG=\*\n/g, '')
+          .replace(/Warning: @salesforce\/cli update available[\s\S]*?\n/g, '')
+          .trim();
+        
+        if (cleanedStderr) {
+          errorMessage = `Deployment failed: ${cleanedStderr}`;
+        }
+      }
+    } catch {
+      // If parsing fails, use original message
+    }
+    
+    // If message is empty after filtering, use generic error
+    if (!errorMessage || errorMessage === 'SF CLI Error: Command failed:') {
+      errorMessage = 'Deployment failed. Run "sf project deploy start" manually in terminal to see full error details.';
+    }
+    
     return {
       success: false,
-      message: `Deployment error: ${error.message}`,
+      message: errorMessage,
+      details: { fullOutput }, // Include full output in details
     };
   }
 }
@@ -281,7 +311,7 @@ export async function quickDeploy(
   jobId: string,
   targetOrg?: string
 ): Promise<{ success: boolean; message: string; details?: any }> {
-  const targetFlag = targetOrg ? `--target-org ${targetOrg}` : '';
+  const targetFlag = `--target-org ${targetOrg || 'default'}`;
   const command = `sf project deploy quick --job-id ${jobId} ${targetFlag} --json`;
   
   try {
@@ -316,7 +346,7 @@ export async function retrieveMetadata(
   sourcePath: string,
   targetOrg?: string
 ): Promise<{ success: boolean; message: string; details?: any }> {
-  const targetFlag = targetOrg ? `--target-org ${targetOrg}` : '';
+  const targetFlag = `--target-org ${targetOrg || 'default'}`;
   const command = `sf project retrieve start --source-dir "${sourcePath}" ${targetFlag} --json`;
   
   try {

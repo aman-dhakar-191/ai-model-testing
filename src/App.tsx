@@ -50,6 +50,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
   const [showProjectSetup, setShowProjectSetup] = useState(false);
+  const [skipProjectCheck, setSkipProjectCheck] = useLocalStorage('skip-project-check', false);
+  const [lastProjectDir, setLastProjectDir] = useLocalStorage<string | null>('last-project-dir', null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -68,14 +70,32 @@ export default function App() {
       const isProject = await window.electron.sfCli.checkIfSalesforceProject(workingDir);
       
       if (!isProject) {
-        setShowProjectSetup(true);
+        // Current directory is not a Salesforce project
+        // Check if we have a valid last project directory
+        if (lastProjectDir) {
+          const lastDirIsValid = await window.electron.sfCli.checkIfSalesforceProject(lastProjectDir);
+          if (lastDirIsValid) {
+            // Don't show modal if we have a valid last project (user can manually switch if needed)
+            if (!skipProjectCheck) {
+              setShowProjectSetup(false);
+            }
+            return;
+          }
+        }
+        
+        // No valid project found, show setup modal (unless user has disabled it)
+        if (!skipProjectCheck) {
+          setShowProjectSetup(true);
+        }
       } else {
+        // Current directory is a valid Salesforce project
         setShowProjectSetup(false);
+        setLastProjectDir(workingDir);
       }
     } catch (error) {
       console.error('Failed to check project status:', error);
     }
-  }, []);
+  }, [skipProjectCheck, lastProjectDir, setLastProjectDir]);
 
   useEffect(() => {
     checkProject();
@@ -226,15 +246,7 @@ export default function App() {
             allMessages = [...allMessages, toolMsg];
           }
 
-          updateChat(activeChat.id, (c) => ({
-            ...c,
-            messages: [...c.messages, ...newMessages],
-            updatedAt: Date.now(),
-            title: isFirstMessage ? title : c.title,
-          }));
-          if (Object.keys(newResults).length > 0) {
-            setToolResultsMap((prev) => ({ ...prev, ...newResults }));
-          }
+          // Don't update chat here - we'll do it at the end of the loop or when done
         } else {
           const assistantMsg: Message = {
             id: generateId(),
@@ -330,7 +342,6 @@ export default function App() {
           </div>
           <div className="header-right">
             <SalesforceOrgManager />
-            <WorkingDirectory />
             <ExportMenu chat={displayChat} />
             <SettingsPanel
               settings={activeChat?.settings ?? globalSettings}
@@ -438,11 +449,24 @@ export default function App() {
       </main>
 
       {showProjectSetup && (
-        <ProjectSetupModal onClose={() => {
-          setShowProjectSetup(false);
-          // Re-check project status after a short delay
-          setTimeout(() => checkProject(), 500);
-        }} />
+        <ProjectSetupModal 
+          onClose={(options) => {
+            setShowProjectSetup(false);
+            
+            // Handle "Don't show again" option
+            if (options?.dontShowAgain) {
+              setSkipProjectCheck(true);
+            }
+            
+            // Save the selected project directory
+            if (options?.projectDir) {
+              setLastProjectDir(options.projectDir);
+            }
+            
+            // Re-check project status after a short delay
+            setTimeout(() => checkProject(), 500);
+          }} 
+        />
       )}
     </div>
   );

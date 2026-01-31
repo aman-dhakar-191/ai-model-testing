@@ -349,15 +349,16 @@ body {
 
 /* Working Directory */
 .working-directory {
+  position: relative;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   padding: 6px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 12px;
-  max-width: 300px;
+  max-width: 400px;
 }
 
 .working-directory-content {
@@ -377,6 +378,29 @@ body {
   min-width: 0;
 }
 
+.working-directory-path-button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Courier New', monospace;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all var(--transition);
+  text-align: left;
+}
+
+.working-directory-path-button:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
 .working-directory-button {
   background: none;
   border: none;
@@ -386,6 +410,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   border-radius: 4px;
   transition: all var(--transition);
   flex-shrink: 0;
@@ -409,7 +434,113 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+Recent Projects Dropdown */
+.recent-projects-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-height: 400px;
+  overflow-y: auto;
+}
 
+.recent-projects-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-tertiary);
+}
+
+.recent-projects-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.recent-project-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition);
+  color: var(--text-primary);
+}
+
+.recent-project-item:last-child {
+  border-bottom: none;
+}
+
+.recent-project-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.recent-project-item.active {
+  background: var(--accent-glow);
+  border-left: 3px solid var(--accent);
+}
+
+.recent-project-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.recent-project-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-project-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.recent-project-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-project-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: 'Courier New', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-project-time {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 
 /* Salesforce Org Manager */
 .sf-org-manager {
   position: relative;
@@ -2084,9 +2215,58 @@ body {
   border-color: var(--primary);
 }
 
+.modal-button.text {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.modal-button.text:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .modal-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  gap: 12px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.checkbox-label:hover {
+  color: var(--text-primary);
+}
+
+.checkbox-label input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .modal-divider {
