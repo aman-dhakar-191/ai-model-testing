@@ -8,15 +8,24 @@ export default defineConfig({
     react(),
     electron({
       main: {
-        // Shortcut of `build.lib.entry`
         entry: 'electron/main.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['electron', 'node:fs', 'node:path', 'node:url'],
+            },
+          },
+        },
       },
       preload: {
-        // Shortcut of `build.rollupOptions.input`
         input: 'electron/preload.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+          },
+        },
       },
-      // Polyfill the Electron and Node.js built-in modules for Renderer process.
-      // See 👉 https://github.com/electron-vite/vite-plugin-electron-renderer
       renderer: {},
     }),
   ],

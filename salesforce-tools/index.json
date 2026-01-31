@@ -1,0 +1,58 @@
+[
+  {
+    "id": "create-apex-class",
+    "name": "create_apex_class",
+    "filename": "create-apex-class.md",
+    "title": "Create Apex Class Tool",
+    "description": "Creates Salesforce Apex classes, triggers, batch, schedulable, queueable, interfaces, and test classes with metadata"
+  },
+  {
+    "id": "create-lwc-component",
+    "name": "create_lwc_component",
+    "filename": "create-lwc-component.md",
+    "title": "Create LWC Component Tool",
+    "description": "Creates Lightning Web Component bundles with HTML, JS, CSS, meta.xml, and optional Apex controller"
+  },
+  {
+    "id": "create-aura-component",
+    "name": "create_aura_component",
+    "filename": "create-aura-component.md",
+    "title": "Create Aura Component Tool",
+    "description": "Creates Aura component bundles with .cmp, controller, helper, and optional design/renderer files"
+  },
+  {
+    "id": "create-visualforce-page",
+    "name": "create_visualforce_page",
+    "filename": "create-visualforce-page.md",
+    "title": "Create Visualforce Page Tool",
+    "description": "Creates Visualforce pages with optional custom Apex controllers and meta.xml"
+  },
+  {
+    "id": "write-file",
+    "name": "write_file",
+    "filename": "write-file.md",
+    "title": "Write File Tool",
+    "description": "Writes content to any file path - use for metadata, configs, package.xml, docs, or any non-component file"
+  },
+  {
+    "id": "edit-file",
+    "name": "edit_file",
+    "filename": "edit-file.md",
+    "title": "Edit File Tool",
+    "description": "Edits existing files using replace (full overwrite) or patch (targeted changes) mode"
+  },
+  {
+    "id": "read-file",
+    "name": "read_file",
+    "filename": "read-file.md",
+    "title": "Read File Tool",
+    "description": "Reads the contents of existing files - use before editing to understand current state"
+  },
+  {
+    "id": "list-files",
+    "name": "list_files",
+    "filename": "list-files.md",
+    "title": "List Files Tool",
+    "description": "Lists all files and directories in a given path - use to understand project structure"
+  }
+]

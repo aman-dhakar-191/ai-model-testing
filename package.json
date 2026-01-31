@@ -1,8 +1,8 @@
 {
   "name": "ai-model-testing",
-  "productName": "AI Model Testing",
+  "productName": "Saleesforce Dev Tool",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A desktop application for testing AI models using the OpenRouter API",
   "main": "dist-electron/main.js",
   "type": "module",
@@ -19,6 +19,7 @@
     "electron:build:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
+    "@salesforce/cli": "^2.70.9",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -46,7 +47,7 @@
   },
   "build": {
     "appId": "com.ai-model-testing.app",
-    "productName": "AI Model Testing",
+    "productName": "Saleesforce Dev Tool",
     "directories": {
       "output": "release/${version}"
     },
@@ -59,8 +60,7 @@
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.developer-tools",
-      "icon": "public/vite.svg"
+      "category": "public.app-category.developer-tools"
     },
     "win": {
       "target": [
@@ -76,16 +76,14 @@
             "x64"
           ]
         }
-      ],
-      "icon": "public/vite.svg"
+      ]
     },
     "linux": {
       "target": [
         "AppImage",
         "tar.gz"
       ],
-      "category": "Development",
-      "icon": "public/vite.svg"
+      "category": "Development"
     },
     "nsis": {
       "oneClick": false,
