@@ -103,15 +103,16 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     });
 
     if (!response.ok) {
-      const statusCode = response.status || 0;
+      const statusCode = response.status;
       let errorMessage = `API request failed with status ${statusCode}`;
       
       try {
         const error = await response.json();
         // Check both error.error.message and error.message patterns
-        if (error?.error?.message) {
+        // Validate that the message is a string to avoid capturing unexpected objects
+        if (error?.error?.message && typeof error.error.message === 'string') {
           errorMessage = error.error.message;
-        } else if (error?.message) {
+        } else if (error?.message && typeof error.message === 'string') {
           errorMessage = error.message;
         }
       } catch {
