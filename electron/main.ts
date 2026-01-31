@@ -31,6 +31,7 @@ const __dirname = path.dirname(__filename);
 // │ │ ├── main.js
 // │ │ └── preload.js
 // │
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.env.DIST = path.join(__dirname, '../dist');
 process.env.VITE_PUBLIC = app.isPackaged
   ? process.env.DIST
