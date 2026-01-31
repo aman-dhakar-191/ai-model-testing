@@ -22,6 +22,20 @@ function emptyTool(): ToolDefinition {
   };
 }
 
+// Helper function to validate and fix parameter types
+function validateParameters(params: Record<string, ToolParameter>): Record<string, ToolParameter> {
+  return Object.fromEntries(
+    Object.entries(params).map(([key, param]) => [
+      key,
+      {
+        ...param,
+        type: param.type && param.type.trim() !== '' ? param.type : 'string',
+      },
+    ]),
+  );
+}
+
+
 function ParamEditor({
   params,
   required,
@@ -181,7 +195,7 @@ export default function ToolEditor({ tools, onChange }: ToolEditorProps) {
       updateTool(id, {
         name: parsed.name ?? '',
         description: parsed.description ?? '',
-        parameters: parsed.parameters ?? {},
+        parameters: validateParameters(parsed.parameters ?? {}),
         required: parsed.required ?? [],
       });
       setJsonMode(null);
@@ -221,7 +235,7 @@ export default function ToolEditor({ tools, onChange }: ToolEditorProps) {
         id: generateId(),
         name: (t.name as string) ?? '',
         description: (t.description as string) ?? '',
-        parameters: (t.parameters as Record<string, ToolParameter>) ?? {},
+        parameters: validateParameters((t.parameters as Record<string, ToolParameter>) ?? {}),
         required: (t.required as string[]) ?? [],
       }));
       onChange(imported);
