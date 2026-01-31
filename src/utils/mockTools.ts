@@ -87,25 +87,29 @@ export function executeMockTool(name: string, argsJson: string): string {
 }
 
 export function toolDefinitionsToApiFormat(tools: ToolDefinition[]) {
-  return tools.map((t) => ({
-    type: 'function' as const,
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: {
-        type: 'object',
-        properties: Object.fromEntries(
-          Object.entries(t.parameters).map(([key, param]) => [
-            key,
-            {
-              type: param.type,
-              description: param.description,
-              ...(param.enum ? { enum: param.enum } : {}),
-            },
-          ]),
-        ),
-        required: t.required,
+  return tools
+    .filter((t) => t.name && t.name.trim() !== '') // Filter out tools with empty names
+    .map((t) => ({
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: {
+          type: 'object',
+          properties: Object.fromEntries(
+            Object.entries(t.parameters)
+              .filter(([, param]) => param.type && param.type.trim() !== '') // Filter out params with empty types
+              .map(([key, param]) => [
+                key,
+                {
+                  type: param.type,
+                  description: param.description,
+                  ...(param.enum ? { enum: param.enum } : {}),
+                },
+              ]),
+          ),
+          required: t.required.filter((r) => t.parameters[r] && t.parameters[r].type && t.parameters[r].type.trim() !== ''), // Only include required params that have valid types
+        },
       },
-    },
-  }));
+    }));
 }
