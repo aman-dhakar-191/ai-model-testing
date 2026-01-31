@@ -19,8 +19,10 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   { id: 'google/gemma-3-27b-it:free', name: 'Gemma 3 27B', provider: 'Google' },
   // OpenAI
   { id: 'openai/gpt-oss-120b:free', name: 'GPT-OSS 120B', provider: 'OpenAI' },
+  { id: 'openai/gpt-oss-20b:free', name: 'GPT-OSS 20B', provider: 'OpenAI' },
   // Qwen
-  { id: 'qwen/qwen3-coder-480b-a35b:free', name: 'Qwen3 Coder 480B A35B', provider: 'Qwen' },
+  { id: 'qwen/qwen3-coder:free', name: 'Qwen3 Coder', provider: 'Qwen' },
+  { id: 'qwen/qwen3-next-80b-a3b-instruct:free', name: 'Qwen3 Next 80b a3b Instruct', provider: 'Qwen' },
   // Upstage
   { id: 'upstage/solar-pro-3:free', name: 'Solar Pro 3', provider: 'Upstage' },
 ];
