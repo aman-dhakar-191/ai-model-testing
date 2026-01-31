@@ -7,7 +7,7 @@ export interface ApiResponse {
 }
 
 // Custom error class to distinguish API errors from other errors
-class ApiError extends Error {
+export class ApiError extends Error {
   statusCode?: number;
   
   constructor(message: string, statusCode?: number) {
@@ -18,7 +18,7 @@ class ApiError extends Error {
 }
 
 // Custom error class for network-related errors
-class NetworkError extends Error {
+export class NetworkError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'NetworkError';
@@ -144,7 +144,12 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     
     // Handle network errors and other exceptions
     if (error instanceof Error) {
-      throw new NetworkError(`${error.message}. Please check your internet connection and try again.`);
+      // Check if it's a fetch-specific network error (TypeError is thrown by fetch on network failures)
+      if (error instanceof TypeError) {
+        throw new NetworkError(`${error.message}. Please check your internet connection and try again.`);
+      }
+      // For other errors, rethrow as-is
+      throw error;
     }
     throw new NetworkError('An unexpected error occurred while connecting to the API.');
   }
