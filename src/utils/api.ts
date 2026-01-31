@@ -6,6 +6,29 @@ export interface ApiResponse {
   toolCalls: ToolCall[] | null;
 }
 
+// Custom error class to distinguish API errors from other errors
+export class ApiError extends Error {
+  statusCode?: number;
+  
+  constructor(message: string, statusCode?: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.statusCode = statusCode;
+    // Maintains proper prototype chain for instanceof checks
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+// Custom error class for network-related errors
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkError';
+    // Maintains proper prototype chain for instanceof checks
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 interface ApiMessage {
   role: string;
   content: string;
@@ -69,23 +92,71 @@ function buildRequestBody(
 }
 
 async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<Response> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-  console.log(`[fetchApi] response: ${response} ${await response.json()}`)
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(
-      error?.error?.message || `API request failed with status ${response.status}`,
-    );
-  }
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
 
-  return response;
+    if (!response.ok) {
+      let errorMessage = `API request failed with status ${response.status}`;
+      
+      try {
+        const error = await response.json();
+        if (error?.error?.message) {
+          errorMessage = error.error.message;
+        }
+      } catch {
+        // If we can't parse the error response, use status-specific messages
+        switch (response.status) {
+          case 400:
+            errorMessage = 'Bad Request: The request was invalid. Please check your input and try again.';
+            break;
+          case 401:
+            errorMessage = 'Unauthorized: Invalid API key. Please check your OpenRouter API key in settings.';
+            break;
+          case 404:
+            errorMessage = 'Not Found: The requested resource was not found.';
+            break;
+          case 429:
+            errorMessage = 'Too Many Requests: Rate limit exceeded. Please wait a moment and try again.';
+            break;
+          case 500:
+            errorMessage = 'Internal Server Error: The server encountered an error. Please try again later.';
+            break;
+          case 503:
+            errorMessage = 'Service Unavailable: The service is temporarily unavailable. Please try again later.';
+            break;
+          default:
+            errorMessage = `API request failed with status ${response.status}`;
+        }
+      }
+      
+      throw new ApiError(errorMessage, response.status);
+    }
+
+    return response;
+  } catch (error) {
+    // If it's already an ApiError, rethrow it
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    
+    // Handle network errors and other exceptions
+    if (error instanceof Error) {
+      // Check if it's a fetch-specific network error (TypeError is thrown by fetch on network failures)
+      if (error instanceof TypeError) {
+        throw new NetworkError('Network error: Failed to connect to the API. Please check your internet connection and try again.');
+      }
+      // For other errors, rethrow as-is
+      throw error;
+    }
+    throw new NetworkError('An unexpected error occurred while connecting to the API.');
+  }
 }
 
 // Non-streaming send (used for tool call rounds)
@@ -138,51 +209,63 @@ export async function sendMessageStreaming(
   const toolCallMap = new Map<number, { id: string; function: { name: string; arguments: string } }>();
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith('data: ')) continue;
-      const data = trimmed.slice(6);
-      if (data === '[DONE]') continue;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') continue;
 
-      try {
-        const parsed = JSON.parse(data);
-        const delta = parsed.choices?.[0]?.delta;
-        if (!delta) continue;
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta;
+          if (!delta) continue;
 
-        // Text content
-        if (delta.content) {
-          fullContent += delta.content;
-          onToken(delta.content);
-        }
-
-        // Tool calls (streamed incrementally)
-        if (hasTools && delta.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            if (!toolCallMap.has(idx)) {
-              toolCallMap.set(idx, {
-                id: tc.id ?? `call_${idx}`,
-                function: { name: tc.function?.name ?? '', arguments: '' },
-              });
-            }
-            const entry = toolCallMap.get(idx)!;
-            if (tc.id) entry.id = tc.id;
-            if (tc.function?.name) entry.function.name = tc.function.name;
-            if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+          // Text content
+          if (delta.content) {
+            fullContent += delta.content;
+            onToken(delta.content);
           }
+
+          // Tool calls (streamed incrementally)
+          if (hasTools && delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!toolCallMap.has(idx)) {
+                toolCallMap.set(idx, {
+                  id: tc.id ?? `call_${idx}`,
+                  function: { name: tc.function?.name ?? '', arguments: '' },
+                });
+              }
+              const entry = toolCallMap.get(idx)!;
+              if (tc.id) entry.id = tc.id;
+              if (tc.function?.name) entry.function.name = tc.function.name;
+              if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+            }
+          }
+        } catch {
+          // Skip malformed JSON lines
         }
-      } catch {
-        // Skip malformed JSON lines
       }
     }
+  } catch (error) {
+    // Don't wrap API errors or network errors - let them propagate as-is
+    if (error instanceof ApiError || error instanceof NetworkError) {
+      throw error;
+    }
+    // Handle streaming-specific errors
+    if (error instanceof Error) {
+      throw new Error(`Streaming error: ${error.message}`);
+    }
+    throw new Error('An error occurred while streaming the response.');
   }
 
   if (toolCallMap.size > 0) {
