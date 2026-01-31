@@ -77,31 +77,66 @@ function buildRequestBody(
   tools?: ToolDefinition[],
   stream?: boolean,
 ): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    model: settings.model,
-    messages: apiMessages,
-    temperature: settings.temperature,
-  };
+  const isOllama = settings.provider === 'ollama';
+  
+  if (isOllama) {
+    // Ollama format
+    const body: Record<string, unknown> = {
+      model: settings.model,
+      messages: apiMessages,
+      stream: stream || false,
+      options: {
+        temperature: settings.temperature,
+      },
+    };
+    
+    if (tools && tools.length > 0) {
+      body.tools = toolDefinitionsToApiFormat(tools);
+    }
+    
+    return body;
+  } else {
+    // OpenRouter format
+    const body: Record<string, unknown> = {
+      model: settings.model,
+      messages: apiMessages,
+      temperature: settings.temperature,
+    };
 
-  if (tools && tools.length > 0) {
-    body.tools = toolDefinitionsToApiFormat(tools);
+    if (tools && tools.length > 0) {
+      body.tools = toolDefinitionsToApiFormat(tools);
+    }
+
+    if (stream) {
+      body.stream = true;
+    }
+
+    return body;
   }
-
-  if (stream) {
-    body.stream = true;
-  }
-
-  return body;
 }
 
-async function fetchApi(body: Record<string, unknown>, apiKey: string, signal?: AbortSignal): Promise<Response> {
+async function fetchApi(
+  body: Record<string, unknown>, 
+  settings: ChatSettings, 
+  signal?: AbortSignal
+): Promise<Response> {
+  const isOllama = settings.provider === 'ollama';
+  const url = isOllama 
+    ? `${settings.ollamaBaseUrl}/api/chat`
+    : 'https://openrouter.ai/api/v1/chat/completions';
+  
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  
+  if (!isOllama) {
+    headers['Authorization'] = `Bearer ${settings.apiKey}`;
+  }
+  
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify(body),
       signal,
     });
@@ -129,7 +164,9 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string, signal?: 
             errorMessage = 'Bad Request: The request was invalid. Please check your input and try again.';
             break;
           case 401:
-            errorMessage = 'Unauthorized: Invalid API key. Please check your OpenRouter API key in settings.';
+            errorMessage = isOllama 
+              ? 'Unauthorized: Unable to connect to Ollama. Please ensure Ollama is running.'
+              : 'Unauthorized: Invalid API key. Please check your OpenRouter API key in settings.';
             break;
           case 404:
             errorMessage = 'Not Found: The requested resource was not found.';
@@ -209,15 +246,17 @@ export async function sendMessage(
   settings: ChatSettings,
   tools?: ToolDefinition[],
 ): Promise<ApiResponse> {
-  if (!settings.apiKey) {
+  if (settings.provider === 'openrouter' && !settings.apiKey) {
     throw new Error('Please enter your OpenRouter API key in the settings panel.');
   }
 
   const apiMessages = buildApiMessages(messages, settings);
   const body = buildRequestBody(apiMessages, settings, tools, false);
-  const response = await fetchApi(body, settings.apiKey);
+  const response = await fetchApi(body, settings);
   const data = await response.json();
-  const choice = data.choices?.[0]?.message;
+  
+  const isOllama = settings.provider === 'ollama';
+  const choice = isOllama ? data.message : data.choices?.[0]?.message;
 
   return {
     content: choice?.content || null,
@@ -233,14 +272,16 @@ export async function sendMessageStreaming(
   onToken: (token: string) => void,
   signal?: AbortSignal,
 ): Promise<ApiResponse> {
-  if (!settings.apiKey) {
+  if (settings.provider === 'openrouter' && !settings.apiKey) {
     throw new Error('Please enter your OpenRouter API key in the settings panel.');
   }
 
   const apiMessages = buildApiMessages(messages, settings);
   const hasTools = tools && tools.length > 0;
   const body = buildRequestBody(apiMessages, settings, tools, true);
-  const response = await fetchApi(body, settings.apiKey, signal);
+  const response = await fetchApi(body, settings, signal);
+  
+  const isOllama = settings.provider === 'ollama';
 
   const reader = response.body?.getReader();
   if (!reader) {
@@ -265,39 +306,75 @@ export async function sendMessageStreaming(
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data: ')) continue;
-        const data = trimmed.slice(6);
-        if (data === '[DONE]') continue;
-
-        try {
-          const parsed = JSON.parse(data);
-          const delta = parsed.choices?.[0]?.delta;
-          if (!delta) continue;
-
-          // Text content
-          if (delta.content) {
-            fullContent += delta.content;
-            onToken(delta.content);
-          }
-
-          // Tool calls (streamed incrementally)
-          if (hasTools && delta.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              const idx = tc.index ?? 0;
-              if (!toolCallMap.has(idx)) {
-                toolCallMap.set(idx, {
-                  id: tc.id ?? `call_${idx}`,
-                  function: { name: tc.function?.name ?? '', arguments: '' },
+        if (!trimmed) continue;
+        
+        if (isOllama) {
+          // Ollama format: each line is a complete JSON object
+          try {
+            const parsed = JSON.parse(trimmed);
+            
+            // Text content
+            if (parsed.message?.content) {
+              const content = parsed.message.content;
+              fullContent += content;
+              onToken(content);
+            }
+            
+            // Tool calls
+            if (hasTools && parsed.message?.tool_calls) {
+              for (const tc of parsed.message.tool_calls) {
+                const idx = toolCalls.length;
+                toolCalls.push({
+                  id: tc.id || `call_${idx}`,
+                  function: {
+                    name: tc.function?.name || '',
+                    arguments: tc.function?.arguments || '',
+                  },
                 });
               }
-              const entry = toolCallMap.get(idx)!;
-              if (tc.id) entry.id = tc.id;
-              if (tc.function?.name) entry.function.name = tc.function.name;
-              if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
             }
+            
+            // Check if done
+            if (parsed.done) break;
+          } catch {
+            // Skip malformed JSON lines
           }
-        } catch {
-          // Skip malformed JSON lines
+        } else {
+          // OpenRouter format: SSE with data: prefix
+          if (!trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta;
+            if (!delta) continue;
+
+            // Text content
+            if (delta.content) {
+              fullContent += delta.content;
+              onToken(delta.content);
+            }
+
+            // Tool calls (streamed incrementally)
+            if (hasTools && delta.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                if (!toolCallMap.has(idx)) {
+                  toolCallMap.set(idx, {
+                    id: tc.id ?? `call_${idx}`,
+                    function: { name: tc.function?.name ?? '', arguments: '' },
+                  });
+                }
+                const entry = toolCallMap.get(idx)!;
+                if (tc.id) entry.id = tc.id;
+                if (tc.function?.name) entry.function.name = tc.function.name;
+                if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+              }
+            }
+          } catch {
+            // Skip malformed JSON lines
+          }
         }
       }
     }
@@ -327,7 +404,7 @@ export async function sendMessageStreaming(
     }
   }
 
-  if (toolCallMap.size > 0) {
+  if (!isOllama && toolCallMap.size > 0) {
     toolCalls = Array.from(toolCallMap.values());
   }
 

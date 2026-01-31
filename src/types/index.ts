@@ -24,6 +24,8 @@ export interface ChatSettings {
   systemPrompt: string;
   temperature: number;
   apiKey: string;
+  provider: 'openrouter' | 'ollama';
+  ollamaBaseUrl: string;
 }
 
 export interface ModelOption {
