@@ -22,5 +22,11 @@
     "filename": "project-structure.md",
     "title": "Project Structure Guide",
     "description": "SFDX project layout, class organization, separation of concerns, naming conventions"
+  },
+  {
+    "id": "fetch-instruction-guide",
+    "filename": "fetch-instruction-guide.md",
+    "title": "Fetch Instruction Tool Guide",
+    "description": "How to use list_instructions and fetch_instruction tools, adding new guides, system prompt integration"
   }
 ]
