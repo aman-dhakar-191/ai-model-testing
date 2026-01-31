@@ -146,7 +146,7 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     if (error instanceof Error) {
       // Check if it's a fetch-specific network error (TypeError is thrown by fetch on network failures)
       if (error instanceof TypeError) {
-        throw new NetworkError(`${error.message}. Please check your internet connection and try again.`);
+        throw new NetworkError('Network error: Failed to connect to the API. Please check your internet connection and try again.');
       }
       // For other errors, rethrow as-is
       throw error;
