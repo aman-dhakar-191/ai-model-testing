@@ -105,11 +105,11 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
     if (!response.ok) {
       const statusCode = response.status;
       let errorMessage = `API request failed with status ${statusCode}`;
-      let errorDetails = null;
+      let parsedErrorResponse = null;
       
       try {
         const error = await response.json();
-        errorDetails = error;
+        parsedErrorResponse = error;
         
         // Check both error.error.message and error.message patterns
         // Validate that the message is a string to avoid capturing unexpected objects
@@ -147,12 +147,17 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
       // Log error details for debugging (only in development)
       if (import.meta.env.DEV) {
         console.group('🚨 API Error Details');
-        console.error('Status Code:', statusCode);
-        console.error('Status Text:', response.statusText);
+        console.log('Status Code:', statusCode);
+        console.log('Status Text:', response.statusText);
         // Log only pathname to avoid exposing query parameters
-        console.error('Path:', new URL(response.url).pathname);
-        if (errorDetails) {
-          console.error('Response Body:', errorDetails);
+        try {
+          console.log('Path:', new URL(response.url).pathname);
+        } catch {
+          // If URL parsing fails, log the URL as-is (it's already sanitized by browser)
+          console.log('URL:', response.url);
+        }
+        if (parsedErrorResponse) {
+          console.log('Response Body:', parsedErrorResponse);
         }
         console.error('Error Message:', errorMessage);
         console.groupEnd();
@@ -168,12 +173,12 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
       throw error;
     }
     
-    // Handle network errors and other exceptions
+    // Handle Error objects
     if (error instanceof Error) {
       // Log network errors (only in development to avoid exposing stack traces)
       if (import.meta.env.DEV) {
         console.group('🚨 Network/Fetch Error');
-        console.error('Error Type:', error.constructor.name);
+        console.log('Error Type:', error.constructor.name);
         console.error('Error Message:', error.message);
         console.groupEnd();
       }
@@ -184,12 +189,13 @@ async function fetchApi(body: Record<string, unknown>, apiKey: string): Promise<
       }
       // For other errors, rethrow as-is
       throw error;
+    } else {
+      // Handle unexpected non-Error objects thrown as errors
+      if (import.meta.env.DEV) {
+        console.error('🚨 Unexpected error type:', typeof error, error);
+      }
+      throw new NetworkError('An unexpected error occurred while connecting to the API.');
     }
-    
-    if (import.meta.env.DEV) {
-      console.error('🚨 Unexpected error type:', typeof error, error);
-    }
-    throw new NetworkError('An unexpected error occurred while connecting to the API.');
   }
 }
 
@@ -295,23 +301,25 @@ export async function sendMessageStreaming(
     if (error instanceof ApiError || error instanceof NetworkError) {
       throw error;
     }
-    // Handle streaming-specific errors
+    
+    // Handle Error objects
     if (error instanceof Error) {
       // Log streaming errors (only in development)
       if (import.meta.env.DEV) {
         console.group('🚨 Streaming Error');
-        console.error('Error Type:', error.constructor.name);
+        console.log('Error Type:', error.constructor.name);
         console.error('Error Message:', error.message);
         console.groupEnd();
       }
       
       throw new Error(`Streaming error: ${error.message}`);
+    } else {
+      // Handle unexpected non-Error objects thrown as errors
+      if (import.meta.env.DEV) {
+        console.error('🚨 Unexpected streaming error:', typeof error, error);
+      }
+      throw new Error('An error occurred while streaming the response.');
     }
-    
-    if (import.meta.env.DEV) {
-      console.error('🚨 Unexpected streaming error:', typeof error, error);
-    }
-    throw new Error('An error occurred while streaming the response.');
   }
 
   if (toolCallMap.size > 0) {
