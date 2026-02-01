@@ -11,6 +11,7 @@ A standalone Electron desktop application for testing AI models using the OpenRo
 - 📤 **Export Options**: Export chat history as JSON or Markdown
 - 🎨 **Modern UI**: Clean, responsive design with gradient styling
 - 🖥️ **Desktop App**: Native desktop application for Windows, macOS, and Linux
+- 🔄 **Auto-Updates**: Automatic update checking with seamless installation
 
 ## Getting Started
 
@@ -96,3 +97,28 @@ git push origin v1.0.0
 ## Download
 
 Download the latest release from the [Releases](https://github.com/aman-dhakar-191/ai-model-testing/releases) page.
+
+## Auto-Update System
+
+The application includes an automatic update system that:
+
+- **Automatically checks** for new releases from GitHub every 6 hours
+- **Notifies users** when a new version is available with release notes
+- **Downloads updates** in the background without interrupting your work
+- **Provides control** - you choose when to install updates
+- **Manual checks** - click "Check for Updates" button anytime
+
+### How Updates Work
+
+1. When a new release is published to GitHub, the app will detect it
+2. You'll see a notification in the bottom-right corner with:
+   - The new version number
+   - Release notes describing what's new
+   - Options to download or postpone
+3. Click "Download" to get the update in the background
+4. When ready, click "Restart & Install" to apply the update
+5. The app restarts with the new version
+
+Updates are only checked in production builds. Development builds don't check for updates.
+
+For more details, see [UPDATE_SERVICE_DOCUMENTATION.md](./UPDATE_SERVICE_DOCUMENTATION.md).
