@@ -78,45 +78,97 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get version from package.json
-        id: get-version
+      # Determines the next version:
+      # - If current package.json version tag doesn't exist → use it as is
+      # - If it already exists → look at commits since last tag and bump accordingly
+      #     feat:  → minor (1.0.0 → 1.1.0)
+      #     fix:   → patch (1.0.0 → 1.0.1)
+      #     other: → patch (fallback)
+      - name: Determine next version
+        id: next-version
         run: |
-          VERSION=$(node -e "console.log(require('./package.json').version)")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Check if tag already exists
-        id: check-tag
-        run: |
-          if git rev-parse --verify "v${{ steps.get-version.outputs.version }}" 2>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Generate release notes from commits
-        if: steps.check-tag.outputs.exists == 'false'
-        id: release-notes
-        run: |
-          # Get the last tag, fallback to empty if no previous tag exists
+          CURRENT_VERSION=$(node -e "console.log(require('./package.json').version)")
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
+          # If no tag exists at all, use current version directly
           if [ -z "$LAST_TAG" ]; then
-            # No previous tag — get all commits
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "bumped=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # If current version tag doesn't exist yet, use it directly
+          if ! git rev-parse --verify "v$CURRENT_VERSION" 2>/dev/null; then
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "bumped=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Tag already exists — need to auto-bump based on commits
+          COMMITS=$(git log "$LAST_TAG"..HEAD --format="%s")
+
+          # Check if any feat commit exists → minor bump
+          if echo "$COMMITS" | grep -qi "^feat"; then
+            BUMP=minor
+          else
+            BUMP=patch
+          fi
+
+          # Parse current version
+          MAJOR=$(echo "$CURRENT_VERSION" | cut -d'.' -f1)
+          MINOR=$(echo "$CURRENT_VERSION" | cut -d'.' -f2)
+          PATCH=$(echo "$CURRENT_VERSION" | cut -d'.' -f3)
+
+          if [ "$BUMP" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bumped=true" >> $GITHUB_OUTPUT
+          echo "Bumping $CURRENT_VERSION → $NEW_VERSION ($BUMP)"
+
+      # Updates package.json with the new version and pushes to main
+      - name: Update package.json version
+        if: steps.next-version.outputs.bumped == 'true'
+        run: |
+          NEW_VERSION=${{ steps.next-version.outputs.version }}
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '$NEW_VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "GitHub Actions"
+          git add package.json
+          git commit -m "chore: bump version to $NEW_VERSION"
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate release notes from commits
+        id: release-notes
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          NEW_VERSION=${{ steps.next-version.outputs.version }}
+
+          if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --format="- %h %s (%an)" --reverse)
           else
-            # Get commits between last tag and HEAD
             COMMITS=$(git log "$LAST_TAG"..HEAD --format="- %h %s (%an)" --reverse)
           fi
 
-          # Categorize commits based on conventional commit prefixes
           FEAT=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* feat" || true)
           FIX=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* fix" || true)
           CHORE=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* chore" || true)
           DOCS=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* docs" || true)
           OTHER=$(echo "$COMMITS" | grep -vi "^- [a-f0-9]* \(feat\|fix\|chore\|docs\)" || true)
 
-          # Build the release notes
-          NOTES="## Release v${{ steps.get-version.outputs.version }}\n\n"
+          NOTES="## Release v$NEW_VERSION\n\n"
 
           if [ -n "$FEAT" ]; then
             NOTES+="### ✨ Features\n$FEAT\n\n"
@@ -134,22 +186,19 @@ jobs:
             NOTES+="### 📦 Other\n$OTHER\n\n"
           fi
 
-          # Write to output file (multiline safe)
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
 
       - name: Download all artifacts
-        if: steps.check-tag.outputs.exists == 'false'
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
       - name: Create tag and release
-        if: steps.check-tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.get-version.outputs.version }}
-          name: Release v${{ steps.get-version.outputs.version }}
+          tag_name: v${{ steps.next-version.outputs.version }}
+          name: Release v${{ steps.next-version.outputs.version }}
           body_path: release_notes.md
           files: |
             artifacts/**/*.exe
