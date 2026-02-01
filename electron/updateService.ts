@@ -77,7 +77,7 @@ export class UpdateService {
     });
   }
 
-  private sendStatusToWindow(event: string, data?: any) {
+  private sendStatusToWindow(event: string, data?: unknown) {
     if (this.mainWindow && this.mainWindow.webContents) {
       this.mainWindow.webContents.send('update-status', { event, data });
     }
