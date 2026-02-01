@@ -2,7 +2,7 @@
   "name": "salesforce-dev-tool",
   "productName": "Salesforce Dev Tool",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A desktop application for testing AI models using the OpenRouter API",
   "main": "dist-electron/main.js",
   "type": "module",
@@ -69,18 +69,24 @@
       "repo": "ai-model-testing"
     },
     "mac": {
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Development"
     },
     "nsis": {
