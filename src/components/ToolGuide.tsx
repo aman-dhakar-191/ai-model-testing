@@ -17,73 +17,85 @@ export default function ToolGuide() {
           <section>
             <h5>What are Tool Calls?</h5>
             <p>
-              Tool calling (function calling) lets AI models request external actions during a
-              conversation. Instead of just generating text, the model can invoke defined functions
-              with structured arguments, receive results, and use them in its response.
+              Tool calling lets AI models execute actions during conversations. The model writes
+              XML tool calls in its response content, and the system automatically parses and
+              executes them.
             </p>
           </section>
 
           <section>
             <h5>How it Works Here</h5>
             <ol>
-              <li>Define tools in the <strong>Tools</strong> section of the settings panel</li>
-              <li>Send a message that might need a tool (e.g. "What's the weather in Tokyo?")</li>
-              <li>If the model decides to use a tool, the call is shown in the chat</li>
-              <li>A <strong>mock result</strong> is automatically generated (no real execution)</li>
-              <li>The mock result is fed back to the model to produce a final answer</li>
+              <li>The AI writes a <code>&lt;tool_call&gt;</code> XML block in its response</li>
+              <li>The system detects and extracts the tool call</li>
+              <li>The tool is executed automatically with the provided arguments</li>
+              <li>The result is sent back to the AI</li>
+              <li>The AI continues its response with the result</li>
             </ol>
           </section>
 
           <section>
-            <h5>Tool Schema Format</h5>
-            <p>Each tool needs:</p>
+            <h5>XML Tool Call Format</h5>
+            <p>The AI writes tool calls using this XML structure:</p>
+            <pre className="guide-code">{`<tool_call>
+<tool_name>list_files</tool_name>
+<arguments>
+{
+  "path": "force-app/main/default/classes"
+}
+</arguments>
+</tool_call>`}</pre>
             <ul>
-              <li><strong>Name</strong> — Function identifier (e.g. <code>get_weather</code>)</li>
-              <li><strong>Description</strong> — What the function does</li>
-              <li><strong>Parameters</strong> — Named inputs with type and description</li>
-              <li><strong>Required</strong> — Which parameters are mandatory</li>
+              <li><strong>&lt;tool_name&gt;</strong> — The function to call</li>
+              <li><strong>&lt;arguments&gt;</strong> — JSON object with parameters</li>
             </ul>
           </section>
 
           <section>
-            <h5>JSON Schema Example</h5>
-            <pre className="guide-code">{`{
-  "name": "get_weather",
-  "description": "Get current weather for a location",
-  "parameters": {
-    "location": {
-      "type": "string",
-      "description": "City name"
-    },
-    "unit": {
-      "type": "string",
-      "description": "Temperature unit",
-      "enum": ["celsius", "fahrenheit"]
-    }
-  },
-  "required": ["location"]
-}`}</pre>
+            <h5>Example: Creating an Apex Class</h5>
+            <pre className="guide-code">{`<tool_call>
+<tool_name>create_apex_class</tool_name>
+<arguments>
+{
+  "className": "AccountTriggerHandler",
+  "content": "public class AccountTriggerHandler {\\n  // handler code\\n}"
+}
+</arguments>
+</tool_call>`}</pre>
           </section>
 
           <section>
             <h5>Tool Usage Best Practices</h5>
             <ul>
-              <li><strong>Before creating files:</strong> Use <code>list_files</code> to check if file already exists</li>
-              <li><strong>Before editing files:</strong> Use <code>read_file</code> to understand current content</li>
-              <li><strong>Before creating components:</strong> Use <code>list_files</code> to check existing components and avoid duplicates</li>
-              <li><strong>Directory structure:</strong> Always use proper Salesforce paths like <code>force-app/main/default/classes</code></li>
-              <li><strong>Validation before deployment:</strong> Use <code>sf_validate_deploy</code> before <code>sf_deploy_metadata</code></li>
-              <li><strong>Sequential operations:</strong> List → Read → Create/Edit → Validate → Deploy</li>
+              <li><strong>Check before creating:</strong> Use <code>list_files</code> to verify files don't exist</li>
+              <li><strong>Read before editing:</strong> Use <code>read_file</code> to understand current content</li>
+              <li><strong>Proper paths:</strong> Always use full Salesforce paths like <code>force-app/main/default/classes</code></li>
+              <li><strong>Sequential flow:</strong> List → Read → Create/Edit → Validate → Deploy</li>
+              <li><strong>Wait for results:</strong> The AI automatically waits for each tool to complete</li>
+            </ul>
+          </section>
+
+          <section>
+            <h5>Available Tools</h5>
+            <ul>
+              <li><code>list_files</code> — Browse project directories</li>
+              <li><code>read_file</code> — Read file contents</li>
+              <li><code>create_apex_class</code> — Create Apex classes/triggers</li>
+              <li><code>create_lwc_component</code> — Create Lightning Web Components</li>
+              <li><code>edit_file</code> — Modify existing files</li>
+              <li><code>sf_validate_deploy</code> — Validate deployment</li>
+              <li><code>sf_deploy_metadata</code> — Deploy to org</li>
+              <li><code>update_todo_list</code> — Track tasks</li>
             </ul>
           </section>
 
           <section>
             <h5>Tips</h5>
             <ul>
-              <li>Use <strong>Presets</strong> to quickly load example tools</li>
-              <li>You can also <strong>Edit as JSON</strong> for full control over the schema</li>
-              <li>All tool results are <strong>mocked</strong> — no real APIs are called</li>
-              <li>Not all models support tool calling — larger models work best</li>
+              <li>Tool calls are written in the <strong>response content</strong>, not in thinking blocks</li>
+              <li>The XML is <strong>automatically hidden</strong> from the UI display</li>
+              <li>Tool results appear as <strong>collapsed blocks</strong> in the chat</li>
+              <li>The AI can make <strong>multiple sequential tool calls</strong></li>
             </ul>
           </section>
         </div>

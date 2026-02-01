@@ -10,7 +10,7 @@
  * - Centralized error handling
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { toolRegistry } from './ToolRegistry';
 import { toolOrchestrator } from './ToolOrchestrator';
 import { eventBus, AppEvents } from './EventBus';
@@ -169,37 +169,16 @@ export function ExampleRefactoredApp() {
   
   // State management (same as before)
   const [_chats, _setChats] = useState<Chat[]>([]);
-  const [_loading, setLoading] = useState(false);
-  const [_streamingContent, setStreamingContent] = useState('');
+  const [_loading, _setLoading] = useState(false);
+  const [_streamingContent, _setStreamingContent] = useState('');
 
   /**
-   * Send message handler - MUCH SIMPLER NOW
+   * Example of using the orchestrator:
+   * 
+   * const handleSend = async (content: string, activeChat: Chat) => {
+   *   await sendMessageWithOrchestrator(content, activeChat, onToken, signal);
+   * };
    */
-  const _handleSendMessage = useCallback(async (content: string, activeChat: Chat) => {
-    setLoading(true);
-    setStreamingContent('');
-    
-    const abortController = new AbortController();
-
-    try {
-      const _result = await sendMessageWithOrchestrator(
-        content,
-        activeChat,
-        (token) => setStreamingContent((prev) => prev + token),
-        abortController.signal,
-      );
-
-      // Update chat with new messages
-      // ... (same as before)
-      
-    } catch (error) {
-      // Error already handled by errorHandler
-      console.error('Message send failed:', error);
-    } finally {
-      setLoading(false);
-      setStreamingContent('');
-    }
-  }, []);
 
   return (
     <div>

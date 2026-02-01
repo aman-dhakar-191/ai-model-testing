@@ -40,6 +40,33 @@ contextBridge.exposeInMainWorld('electron', {
     listModels: () => ipcRenderer.invoke('ollama-list-models'),
   },
   
+  // Database operations
+  db: {
+    getChats: () => ipcRenderer.invoke('db-get-chats'),
+    getChat: (chatId: string) => ipcRenderer.invoke('db-get-chat', chatId),
+    createChat: (chat: any) => ipcRenderer.invoke('db-create-chat', chat),
+    updateChat: (chatId: string, updates: any) => ipcRenderer.invoke('db-update-chat', chatId, updates),
+    deleteChat: (chatId: string) => ipcRenderer.invoke('db-delete-chat', chatId),
+    getMessages: (chatId: string) => ipcRenderer.invoke('db-get-messages', chatId),
+    addMessage: (message: any) => ipcRenderer.invoke('db-add-message', message),
+    updateMessage: (messageId: string, content: string) => ipcRenderer.invoke('db-update-message', messageId, content),
+    getToolCalls: (messageId: string) => ipcRenderer.invoke('db-get-tool-calls', messageId),
+    addToolCall: (toolCall: any) => ipcRenderer.invoke('db-add-tool-call', toolCall),
+    getChatSettings: (chatId: string) => ipcRenderer.invoke('db-get-chat-settings', chatId),
+    saveChatSettings: (settings: any) => ipcRenderer.invoke('db-save-chat-settings', settings),
+    getTodos: (chatId: string) => ipcRenderer.invoke('db-get-todos', chatId),
+    saveTodos: (chatId: string, todos: any[]) => ipcRenderer.invoke('db-save-todos', chatId, todos),
+    getToolResults: () => ipcRenderer.invoke('db-get-tool-results'),
+    saveToolResult: (id: string, name: string, result: string) => ipcRenderer.invoke('db-save-tool-result', id, name, result),
+    clearOldToolResults: () => ipcRenderer.invoke('db-clear-old-tool-results'),
+    getInstructionsUsed: (chatId: string) => ipcRenderer.invoke('db-get-instructions-used', chatId),
+    addInstructionUsed: (chatId: string, instructionId: string) => ipcRenderer.invoke('db-add-instruction-used', chatId, instructionId),
+    getAppSetting: (key: string) => ipcRenderer.invoke('db-get-app-setting', key),
+    setAppSetting: (key: string, value: string) => ipcRenderer.invoke('db-set-app-setting', key, value),
+    getStats: () => ipcRenderer.invoke('db-get-stats'),
+    vacuum: () => ipcRenderer.invoke('db-vacuum'),
+  },
+  
   // Example: Send message to main process
   send: (channel: string, data: unknown) => {
     // Whitelist channels

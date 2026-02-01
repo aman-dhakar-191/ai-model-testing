@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -20,6 +20,7 @@ import {
   quickDeploy,
   retrieveMetadata,
 } from '../src/utils/sfCliOperations';
+import { DatabaseService } from './database';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,6 +71,7 @@ process.env.VITE_PUBLIC = app.isPackaged
   : path.join(process.env.DIST, '../public');
 
 let win: BrowserWindow | null;
+let database: DatabaseService;
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 const DIST = process.env.DIST!;
 const VITE_PUBLIC = process.env.VITE_PUBLIC!;
@@ -319,4 +321,108 @@ ipcMain.handle('ollama-list-models', async () => {
   }
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  try {
+    // Initialize database
+    database = new DatabaseService();
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+  }
+  
+  createWindow();
+});
+
+// Database IPC Handlers
+ipcMain.handle('db-get-chats', async () => {
+  return database.getAllChats();
+});
+
+ipcMain.handle('db-get-chat', async (_event, chatId: string) => {
+  return database.getChat(chatId);
+});
+
+ipcMain.handle('db-create-chat', async (_event, chat: any) => {
+  database.createChat(chat);
+});
+
+ipcMain.handle('db-update-chat', async (_event, chatId: string, updates: any) => {
+  database.updateChat(chatId, updates);
+});
+
+ipcMain.handle('db-delete-chat', async (_event, chatId: string) => {
+  database.deleteChat(chatId);
+});
+
+ipcMain.handle('db-get-messages', async (_event, chatId: string) => {
+  return database.getMessages(chatId);
+});
+
+ipcMain.handle('db-add-message', async (_event, message: any) => {
+  database.addMessage(message);
+});
+
+ipcMain.handle('db-update-message', async (_event, messageId: string, content: string) => {
+  database.updateMessage(messageId, content);
+});
+
+ipcMain.handle('db-get-tool-calls', async (_event, messageId: string) => {
+  return database.getToolCalls(messageId);
+});
+
+ipcMain.handle('db-add-tool-call', async (_event, toolCall: any) => {
+  database.addToolCall(toolCall);
+});
+
+ipcMain.handle('db-get-chat-settings', async (_event, chatId: string) => {
+  return database.getChatSettings(chatId);
+});
+
+ipcMain.handle('db-save-chat-settings', async (_event, settings: any) => {
+  database.saveChatSettings(settings);
+});
+
+ipcMain.handle('db-get-todos', async (_event, chatId: string) => {
+  return database.getTodos(chatId);
+});
+
+ipcMain.handle('db-save-todos', async (_event, chatId: string, todos: any[]) => {
+  database.saveTodos(chatId, todos);
+});
+
+ipcMain.handle('db-get-tool-results', async () => {
+  return database.getToolResults();
+});
+
+ipcMain.handle('db-save-tool-result', async (_event, id: string, name: string, result: string) => {
+  database.saveToolResult(id, name, result);
+});
+
+ipcMain.handle('db-clear-old-tool-results', async () => {
+  database.clearOldToolResults();
+});
+
+ipcMain.handle('db-get-instructions-used', async (_event, chatId: string) => {
+  return database.getInstructionsUsed(chatId);
+});
+
+ipcMain.handle('db-add-instruction-used', async (_event, chatId: string, instructionId: string) => {
+  database.addInstructionUsed(chatId, instructionId);
+});
+
+ipcMain.handle('db-get-app-setting', async (_event, key: string) => {
+  return database.getAppSetting(key);
+});
+
+ipcMain.handle('db-set-app-setting', async (_event, key: string, value: string) => {
+  database.setAppSetting(key, value);
+});
+
+ipcMain.handle('db-get-stats', async () => {
+  return database.getStats();
+});
+
+ipcMain.handle('db-vacuum', async () => {
+  database.vacuum();
+});

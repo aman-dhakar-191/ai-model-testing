@@ -1,6 +1,4 @@
 import type { Message, ChatSettings, ToolDefinition, ToolCall } from '../types';
-import { toolDefinitionsToApiFormat } from './mockTools';
-import { toolInstructionLoader } from './toolInstructions';
 
 export interface ApiResponse {
   content: string | null;
@@ -62,45 +60,53 @@ async function getEnvironmentContext(tools?: ToolDefinition[]): Promise<string> 
       orgInfo = 'Not connected';
     }
     
-    // Create a simplified file structure for context (limit depth to avoid too much data)
-    const simplifyFileTree = (items: any[], depth = 0, maxDepth = 3): string => {
-      if (depth >= maxDepth || !items || items.length === 0) return '';
+    // Create a flat list of all file paths for context
+    const getAllFilePaths = (items: any[], basePath = ''): string[] => {
+      if (!items || items.length === 0) return [];
       
-      return items
-        .filter(item => {
-          // Filter out node_modules, .git, and other common large directories
-          const name = item.name || '';
-          return !name.startsWith('.') && 
-                 name !== 'node_modules' && 
-                 name !== 'coverage' &&
-                 name !== 'dist' &&
-                 name !== 'build';
-        })
-        .map(item => {
-          const indent = '  '.repeat(depth);
-          const prefix = item.type === 'directory' ? '📁' : '📄';
-          const line = `${indent}${prefix} ${item.name}`;
-          
-          if (item.type === 'directory' && item.children) {
-            const children = simplifyFileTree(item.children, depth + 1, maxDepth);
-            return children ? `${line}\n${children}` : line;
+      const paths: string[] = [];
+      
+      items.forEach(item => {
+        const name = item.name || '';
+        // Filter out node_modules, .git, and other common large directories
+        if (name.startsWith('.') || 
+            name === 'node_modules' || 
+            name === 'coverage' ||
+            name === 'dist' ||
+            name === 'build') {
+          return;
+        }
+        
+        const fullPath = basePath ? `${basePath}/${name}` : name;
+        
+        if (item.type === 'directory') {
+          // Add directory path
+          paths.push(`${fullPath}/`);
+          // Recursively get children
+          if (item.children) {
+            paths.push(...getAllFilePaths(item.children, fullPath));
           }
-          return line;
-        })
-        .join('\n');
+        } else {
+          // Add file path
+          paths.push(fullPath);
+        }
+      });
+      
+      return paths;
     };
 
-    const fileStructure = simplifyFileTree(fileTree);
+    const allPaths = getAllFilePaths(fileTree);
+    const fileStructure = allPaths.join('\n');
     
-    let context = `\n\n---\n**Environment Context:**\n- Working Directory: ${workingDir}\n- Connected Org: ${orgInfo}\n- Project Structure:\n${fileStructure}`;
+    let context = `\n\n---\n<environment_context>\nWorking Directory: ${workingDir}\nConnected Org: ${orgInfo}\n\nProject Structure (${allPaths.length} items):\n${fileStructure}\n</environment_context>`;
     
     // Add available tools list
     if (tools && tools.length > 0) {
-      context += `\n\n**Available Tools:**\n`;
+      context += `\n\n<available_tools>\n`;
       tools.forEach(tool => {
         context += `- ${tool.name}: ${tool.description}\n`;
       });
-      context += `\n(Use these tools when needed to accomplish tasks)`;
+      context += `\n(Use these tools when needed to accomplish tasks)\n</available_tools>`;
     }
     
     context += `\n---\n`;
@@ -153,14 +159,15 @@ async function buildApiMessagesWithContext(messages: Message[], settings: ChatSe
     } else if (msg.role === 'user') {
       // Remove any existing context from previous user messages
       let content = msg.content;
-      const contextMarker = '\n\n---\n**Environment Context:**';
+      const contextMarker = '\n\n---\n<environment_context>';
       if (content.includes(contextMarker)) {
         content = content.split(contextMarker)[0].trim();
       }
       
       // Only add context to the LAST user message
       if (i === lastUserMessageIndex && envContext) {
-        content = content + envContext;
+        // Wrap the actual user request in XML tag
+        content = `<user_request>\n${content}\n</user_request>${envContext}`;
       }
       
       apiMessages.push({ 
@@ -175,34 +182,10 @@ async function buildApiMessagesWithContext(messages: Message[], settings: ChatSe
   return apiMessages;
 }
 
-function buildRequestBody(
-  apiMessages: ApiMessage[],
-  settings: ChatSettings,
-  tools?: ToolDefinition[],
-  stream?: boolean,
-): Record<string, unknown> {
-  // Use OpenAI-compatible format for both Ollama and OpenRouter
-  const body: Record<string, unknown> = {
-    model: settings.model,
-    messages: apiMessages,
-    temperature: settings.temperature,
-  };
-
-  if (tools && tools.length > 0) {
-    body.tools = toolDefinitionsToApiFormat(tools);
-  }
-
-  if (stream) {
-    body.stream = true;
-  }
-
-  return body;
-}
-
 async function buildRequestBodyWithInstructions(
   apiMessages: ApiMessage[],
   settings: ChatSettings,
-  tools?: ToolDefinition[],
+  _tools?: ToolDefinition[], // eslint-disable-line @typescript-eslint/no-unused-vars
   stream?: boolean,
 ): Promise<Record<string, unknown>> {
   // Use OpenAI-compatible format for both Ollama and OpenRouter
@@ -212,11 +195,12 @@ async function buildRequestBodyWithInstructions(
     temperature: settings.temperature,
   };
 
-  if (tools && tools.length > 0) {
-    // Enrich tool descriptions with detailed instructions
-    const enrichedTools = await toolInstructionLoader.enrichToolDefinitions(tools);
-    body.tools = toolDefinitionsToApiFormat(enrichedTools);
-  }
+  // DO NOT send tools parameter - we use custom XML tool calling
+  // Tools are documented in the system prompt instead
+  // if (tools && tools.length > 0) {
+  //   const enrichedTools = await toolInstructionLoader.enrichToolDefinitions(tools);
+  //   body.tools = toolDefinitionsToApiFormat(enrichedTools);
+  // }
 
   if (stream) {
     body.stream = true;
@@ -425,14 +409,45 @@ export async function sendMessageStreaming(
           const delta = parsed.choices?.[0]?.delta;
           if (!delta) continue;
 
+          // Handle both content and reasoning fields
+          // Some models (like Qwen) use 'reasoning' for thinking and 'content' for final output
+          let tokenToStream = '';
+          
+          if (delta.reasoning) {
+            // Wrap reasoning in <think> tags for proper parsing
+            if (fullContent === '' || fullContent.endsWith('</think>')) {
+              tokenToStream = '<think>' + delta.reasoning;
+            } else if (fullContent.includes('<think>') && !fullContent.includes('</think>')) {
+              // Already in thinking mode, just append
+              tokenToStream = delta.reasoning;
+            } else {
+              tokenToStream = '<think>' + delta.reasoning;
+            }
+            fullContent += tokenToStream;
+            onToken(tokenToStream);
+          }
+          
           // Text content
           if (delta.content) {
+            // If we were in thinking mode, close it before adding content
+            if (fullContent.includes('<think>') && !fullContent.includes('</think>')) {
+              const closeTag = '</think>';
+              fullContent += closeTag;
+              onToken(closeTag);
+            }
             fullContent += delta.content;
             onToken(delta.content);
           }
 
           // Tool calls (streamed incrementally)
           if (hasTools && delta.tool_calls) {
+            // Close thinking tag if we were in thinking mode and about to show tool calls
+            if (fullContent.includes('<think>') && !fullContent.includes('</think>')) {
+              const closeTag = '</think>';
+              fullContent += closeTag;
+              onToken(closeTag);
+            }
+            
             for (const tc of delta.tool_calls) {
               const idx = tc.index ?? 0;
               if (!toolCallMap.has(idx)) {

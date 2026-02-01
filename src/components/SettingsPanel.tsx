@@ -1,6 +1,6 @@
 import { Settings, Eye, EyeOff } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
-import { OPENROUTER_MODELS } from '../utils/constants';
+import { OPENROUTER_MODELS, DEFAULT_SETTINGS } from '../utils/constants';
 import type { ChatSettings, ModelOption } from '../types';
 
 interface SettingsPanelProps {
@@ -159,6 +159,20 @@ export default function SettingsPanel({ settings, onChange, open, onToggle, tool
       </label>
 
       <div className="settings-divider" />
+
+      <div className="setting-label">
+        <button
+          className="secondary-btn"
+          onClick={() => onChange({ ...settings, systemPrompt: DEFAULT_SETTINGS.systemPrompt })}
+          style={{ width: '100%', marginBottom: '0.5rem' }}
+          title="Reset system prompt to the latest default version"
+        >
+          🔄 Reset System Prompt to Default
+        </button>
+        <small style={{ color: '#888', fontSize: '0.85em' }}>
+          Use this to update old chats with the latest system prompt improvements
+        </small>
+      </div>
 
       {thinkingGuide}
       {instructionGuide}

@@ -48,6 +48,31 @@ export interface ElectronAPI {
   ollama: {
     listModels: () => Promise<string[]>;
   };
+  db: {
+    getChats: () => Promise<any[]>;
+    getChat: (chatId: string) => Promise<any | null>;
+    createChat: (chat: any) => Promise<void>;
+    updateChat: (chatId: string, updates: any) => Promise<void>;
+    deleteChat: (chatId: string) => Promise<void>;
+    getMessages: (chatId: string) => Promise<any[]>;
+    addMessage: (message: any) => Promise<void>;
+    updateMessage: (messageId: string, content: string) => Promise<void>;
+    getToolCalls: (messageId: string) => Promise<any[]>;
+    addToolCall: (toolCall: any) => Promise<void>;
+    getChatSettings: (chatId: string) => Promise<any | null>;
+    saveChatSettings: (settings: any) => Promise<void>;
+    getTodos: (chatId: string) => Promise<any[]>;
+    saveTodos: (chatId: string, todos: any[]) => Promise<void>;
+    getToolResults: () => Promise<any[]>;
+    saveToolResult: (id: string, name: string, result: string) => Promise<void>;
+    clearOldToolResults: () => Promise<void>;
+    getInstructionsUsed: (chatId: string) => Promise<any[]>;
+    addInstructionUsed: (chatId: string, instructionId: string) => Promise<void>;
+    getAppSetting: (key: string) => Promise<string | null>;
+    setAppSetting: (key: string, value: string) => Promise<void>;
+    getStats: () => Promise<any>;
+    vacuum: () => Promise<void>;
+  };
   send: (channel: string, data: unknown) => void;
   receive: (channel: string, func: (...args: unknown[]) => void) => void;
 }

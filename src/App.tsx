@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
-import { Bot, RotateCcw, StopCircle, Plus, Trash2 } from 'lucide-react';
+import { RotateCcw, StopCircle, Plus, Trash2 } from 'lucide-react';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import SettingsPanel from './components/SettingsPanel';
@@ -14,14 +14,14 @@ import ProjectSetupModal from './components/ProjectSetupModal';
 import FileExplorer from './components/FileExplorer';
 import TodoList from './components/TodoList';
 import { useLocalStorage } from './hooks/useLocalStorage';
+import { DatabaseService } from './services/DatabaseService';
 import { sendMessageStreaming } from './utils/api';
 import { executeMockTool } from './utils/mockTools';
 import { INSTRUCTION_TOOLS, executeInstructionTool, isInstructionTool } from './utils/instructions';
 import { SALESFORCE_TOOLS, executeSalesforceTool, isSalesforceTool } from './utils/salesforceToolsRenderer';
 import { DEPLOY_TOOLS, executeDeployTool, isDeployTool } from './utils/deployTools';
 import { DEFAULT_SETTINGS } from './utils/constants';
-import { getStreamingThinking, isCurrentlyThinking } from './utils/thinking';
-import ThinkingBlock from './components/ThinkingBlock';
+import { extractToolCalls, hasUncompletedToolCall, removeToolCalls } from './utils/toolCallParser';
 import type { Chat, ChatSettings, Message, ToolDefinition } from './types';
 
 function generateId() {
@@ -46,7 +46,7 @@ export default function App() {
   const [tools, setTools] = useLocalStorage<ToolDefinition[]>('ai-testing-tools', []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
+  const [_streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
   const [showProjectSetup, setShowProjectSetup] = useState(false);
@@ -100,6 +100,19 @@ export default function App() {
   useEffect(() => {
     checkProject();
   }, [checkProject]);
+
+  // Migrate from localStorage to SQLite database if running in Electron
+  useEffect(() => {
+    if (DatabaseService.isElectron()) {
+      DatabaseService.migrateFromLocalStorage().then((result) => {
+        if (result.success) {
+          console.log('Successfully migrated to database');
+        } else {
+          console.error('Migration failed:', result.error);
+        }
+      });
+    }
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -183,7 +196,10 @@ export default function App() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const currentSettings = activeChat.settings;
+      // Use current chat settings with modular system prompt
+      const currentSettings = {
+        ...activeChat.settings,
+      };
       let allMessages = [...activeChat.messages, userMessage];
 
       let maxRounds = 10;
@@ -194,31 +210,100 @@ export default function App() {
       while (maxRounds > 0) {
         maxRounds--;
 
+        // Create a temporary streaming assistant message ID
+        const streamingMsgId = generateId();
+        let lastProcessedContent = '';
+        
         const response = await sendMessageStreaming(
           allMessages,
           currentSettings,
           allTools,
           (token) => {
-            setStreamingContent((prev) => prev + token);
+            // Update streaming content for real-time display
+            setStreamingContent((prev) => {
+              const newContent = prev + token;
+              
+              // Check if we have incomplete tool calls - if so, don't update yet
+              if (!hasUncompletedToolCall(newContent) && newContent !== lastProcessedContent) {
+                lastProcessedContent = newContent;
+                
+                // Update the chat with the streaming content in real-time
+                updateChat(activeChat.id, (c) => {
+                  const messages = [...c.messages];
+                  const streamingMsgIndex = messages.findIndex(m => m.id === streamingMsgId);
+                  
+                  // Remove tool call XML from displayed content
+                  const displayContent = removeToolCalls(newContent);
+                  
+                  if (streamingMsgIndex >= 0) {
+                    // Update existing streaming message
+                    messages[streamingMsgIndex] = {
+                      ...messages[streamingMsgIndex],
+                      content: displayContent,
+                    };
+                  } else {
+                    // Create new streaming message
+                    messages.push({
+                      id: streamingMsgId,
+                      role: 'assistant',
+                      content: displayContent,
+                      timestamp: Date.now(),
+                      model: currentSettings.model,
+                      isStreaming: true,
+                    });
+                  }
+                  
+                  return { ...c, messages, updatedAt: Date.now() };
+                });
+              }
+              
+              return newContent;
+            });
           },
           abortControllerRef.current.signal,
         );
 
-        if (response.toolCalls && response.toolCalls.length > 0) {
+        // Extract tool calls from the response content
+        const toolCallsInContent = extractToolCalls(response.content || '');
+        
+        // Remove the streaming message and add the final one
+        updateChat(activeChat.id, (c) => ({
+          ...c,
+          messages: c.messages.filter(m => m.id !== streamingMsgId),
+        }));
+
+        if (toolCallsInContent.length > 0) {
           setStreamingContent('');
+
+          // Remove tool call XML from content for display
+          const cleanContent = removeToolCalls(response.content || '');
 
           const assistantMsg: Message = {
             id: generateId(),
             role: 'assistant',
-            content: response.content || '',
+            content: cleanContent,
             timestamp: Date.now(),
             model: currentSettings.model,
-            toolCalls: response.toolCalls,
+            toolCalls: toolCallsInContent.map((tc, idx) => ({
+              id: `call_${Date.now()}_${idx}`,
+              type: 'function',
+              function: {
+                name: tc.name,
+                arguments: tc.arguments,
+              },
+            })),
           };
           newMessages.push(assistantMsg);
           allMessages = [...allMessages, assistantMsg];
 
-          for (const call of response.toolCalls) {
+          // Update chat immediately with assistant message containing tool calls
+          updateChat(activeChat.id, (c) => ({
+            ...c,
+            messages: [...c.messages, assistantMsg],
+            updatedAt: Date.now(),
+          }));
+
+          for (const call of assistantMsg.toolCalls!) {
             let result: string;
 
             if (isInstructionTool(call.function.name)) {
@@ -255,6 +340,8 @@ export default function App() {
 
             newResults[call.id] = { name: call.function.name, result };
 
+            // Tool results are added to allMessages (for API context) but NOT to chat.messages
+            // The UI shows tool results via toolResults map passed to ChatMessage component
             const toolMsg: Message = {
               id: generateId(),
               role: 'tool',
@@ -263,11 +350,10 @@ export default function App() {
               toolCallId: call.id,
               toolName: call.function.name,
             };
-            newMessages.push(toolMsg);
             allMessages = [...allMessages, toolMsg];
           }
 
-          // Don't update chat here - we'll do it at the end of the loop or when done
+          // Continue to next round with tool results in allMessages
         } else {
           const assistantMsg: Message = {
             id: generateId(),
@@ -287,12 +373,24 @@ export default function App() {
         setToolResultsMap((prev) => ({ ...prev, ...newResults }));
       }
 
-      updateChat(activeChat.id, (c) => ({
-        ...c,
-        messages: [...c.messages, ...newMessages],
-        updatedAt: Date.now(),
-        title: isFirstMessage ? title : c.title,
-      }));
+      // Only add the final assistant message if it wasn't a tool call
+      // (tool call messages were already added in the loop)
+      const finalMessage = newMessages[newMessages.length - 1];
+      if (finalMessage && finalMessage.role === 'assistant' && !finalMessage.toolCalls) {
+        updateChat(activeChat.id, (c) => ({
+          ...c,
+          messages: [...c.messages, finalMessage],
+          updatedAt: Date.now(),
+          title: isFirstMessage ? title : c.title,
+        }));
+      } else if (newMessages.length === 0) {
+        // No messages were added at all (shouldn't happen but handle it)
+        updateChat(activeChat.id, (c) => ({
+          ...c,
+          updatedAt: Date.now(),
+          title: isFirstMessage ? title : c.title,
+        }));
+      }
     } catch (err) {
       setStreamingContent('');
       // Check if error is abort error
@@ -431,40 +529,23 @@ export default function App() {
               {displayChat.messages.map((msg) => (
                 <ChatMessage key={msg.id} message={msg} toolResults={resultsMap} />
               ))}
-              {loading && (() => {
-                const streamThinking = streamingContent ? getStreamingThinking(streamingContent) : null;
-                const currentlyThinking = streamingContent ? isCurrentlyThinking(streamingContent) : false;
-                return (
-                  <div className="chat-message assistant">
-                    <div className="message-avatar">
-                      {streamingContent ? (
-                        <Bot size={18} />
-                      ) : (
-                        <span className="typing">
-                          <span className="dot" />
-                          <span className="dot" />
-                          <span className="dot" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="message-body">
-                      <div className="message-header">
-                        <span className="message-role">Assistant</span>
-                        <span className="message-model streaming-badge">
-                          {currentlyThinking ? 'thinking...' : 'streaming...'}
-                        </span>
-                      </div>
-                      {streamThinking?.thinking && (
-                        <ThinkingBlock content={streamThinking.thinking} isStreaming={currentlyThinking} />
-                      )}
-                      <div className="message-content">
-                        {streamThinking?.visible || (!streamingContent ? 'Waiting for response...' : '')}
-                        {streamThinking?.visible && !currentlyThinking && <span className="streaming-cursor" />}
-                      </div>
-                    </div>
+              {loading && !displayChat.messages.some(m => m.isStreaming) && (
+                <div className="chat-message assistant">
+                  <div className="message-avatar">
+                    <span className="typing">
+                      <span className="dot" />
+                      <span className="dot" />
+                      <span className="dot" />
+                    </span>
                   </div>
-                );
-              })()}
+                  <div className="message-body">
+                    <div className="message-header">
+                      <span className="message-role">Assistant</span>
+                    </div>
+                    <div className="message-content">Waiting for response...</div>
+                  </div>
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
           )}

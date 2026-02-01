@@ -8,6 +8,7 @@ export interface Message {
   toolCallId?: string;
   toolName?: string;
   instructionsUsed?: { guideId: string; title: string }[];
+  isStreaming?: boolean;
 }
 
 export interface Chat {
