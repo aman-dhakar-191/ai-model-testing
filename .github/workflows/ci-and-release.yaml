@@ -77,6 +77,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for git describe and tag checks
 
       # Determines the next version:
       # - If current package.json version tag doesn't exist → use it as is
@@ -90,8 +92,16 @@ jobs:
           CURRENT_VERSION=$(node -e "console.log(require('./package.json').version)")
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
+          echo "============================="
+          echo "📦 package.json version : $CURRENT_VERSION"
+          echo "🏷️  Last existing tag    : ${LAST_TAG:-none}"
+          echo "🔍 All tags             :"
+          git tag -l
+          echo "============================="
+
           # If no tag exists at all, use current version directly
           if [ -z "$LAST_TAG" ]; then
+            echo "➡️  No tags found → using package.json version as is: v$CURRENT_VERSION"
             echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
             echo "bumped=false" >> $GITHUB_OUTPUT
             exit 0
@@ -99,13 +109,19 @@ jobs:
 
           # If current version tag doesn't exist yet, use it directly
           if ! git rev-parse --verify "v$CURRENT_VERSION" 2>/dev/null; then
+            echo "➡️  Tag v$CURRENT_VERSION doesn't exist yet → using it as is"
             echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
             echo "bumped=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           # Tag already exists — need to auto-bump based on commits
+          echo "⚠️  Tag v$CURRENT_VERSION already exists → auto-bumping"
           COMMITS=$(git log "$LAST_TAG"..HEAD --format="%s")
+
+          echo "📝 Commits since $LAST_TAG:"
+          echo "$COMMITS"
+          echo "============================="
 
           # Check if any feat commit exists → minor bump
           if echo "$COMMITS" | grep -qi "^feat"; then
@@ -127,15 +143,21 @@ jobs:
           fi
 
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          echo "📈 Bump type            : $BUMP"
+          echo "📦 Old version          : $CURRENT_VERSION"
+          echo "✅ New version          : $NEW_VERSION"
+          echo "============================="
+
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "bumped=true" >> $GITHUB_OUTPUT
-          echo "Bumping $CURRENT_VERSION → $NEW_VERSION ($BUMP)"
 
       # Updates package.json with the new version and pushes to main
       - name: Update package.json version
         if: steps.next-version.outputs.bumped == 'true'
         run: |
           NEW_VERSION=${{ steps.next-version.outputs.version }}
+          echo "📝 Writing version $NEW_VERSION to package.json"
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -155,21 +177,17 @@ jobs:
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           NEW_VERSION=${{ steps.next-version.outputs.version }}
-
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --format="- %h %s (%an)" --reverse)
           else
             COMMITS=$(git log "$LAST_TAG"..HEAD --format="- %h %s (%an)" --reverse)
           fi
-
           FEAT=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* feat" || true)
           FIX=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* fix" || true)
           CHORE=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* chore" || true)
           DOCS=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* docs" || true)
           OTHER=$(echo "$COMMITS" | grep -vi "^- [a-f0-9]* \(feat\|fix\|chore\|docs\)" || true)
-
           NOTES="## Release v$NEW_VERSION\n\n"
-
           if [ -n "$FEAT" ]; then
             NOTES+="### ✨ Features\n$FEAT\n\n"
           fi
@@ -185,7 +203,6 @@ jobs:
           if [ -n "$OTHER" ]; then
             NOTES+="### 📦 Other\n$OTHER\n\n"
           fi
-
           echo -e "$NOTES" > release_notes.md
           cat release_notes.md
 
