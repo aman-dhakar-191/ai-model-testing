@@ -2,7 +2,7 @@
   "name": "salesforce-dev-tool",
   "productName": "Saleesforce Dev Tool",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A desktop application for testing AI models using the OpenRouter API",
   "main": "dist-electron/main.js",
   "type": "module",
