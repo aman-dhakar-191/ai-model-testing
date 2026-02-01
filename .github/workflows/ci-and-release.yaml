@@ -1,0 +1,163 @@
+name: CI and Release
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Job 1: Runs only on PR — validates the code builds
+  dev-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+  # Job 2: Runs only on merge to main — builds for all 3 platforms
+  build:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run electron:build:${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-${{ matrix.platform }}
+          path: |
+            release/**/*.exe
+            release/**/*.dmg
+            release/**/*.zip
+            release/**/*.AppImage
+            release/**/*.tar.gz
+          retention-days: 7
+
+  # Job 3: Runs after build — creates tag and release from package.json version
+  release:
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: get-version
+        run: |
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if tag already exists
+        id: check-tag
+        run: |
+          if git rev-parse --verify "v${{ steps.get-version.outputs.version }}" 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release notes from commits
+        if: steps.check-tag.outputs.exists == 'false'
+        id: release-notes
+        run: |
+          # Get the last tag, fallback to empty if no previous tag exists
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            # No previous tag — get all commits
+            COMMITS=$(git log --format="- %h %s (%an)" --reverse)
+          else
+            # Get commits between last tag and HEAD
+            COMMITS=$(git log "$LAST_TAG"..HEAD --format="- %h %s (%an)" --reverse)
+          fi
+
+          # Categorize commits based on conventional commit prefixes
+          FEAT=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* feat" || true)
+          FIX=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* fix" || true)
+          CHORE=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* chore" || true)
+          DOCS=$(echo "$COMMITS" | grep -i "^- [a-f0-9]* docs" || true)
+          OTHER=$(echo "$COMMITS" | grep -vi "^- [a-f0-9]* \(feat\|fix\|chore\|docs\)" || true)
+
+          # Build the release notes
+          NOTES="## Release v${{ steps.get-version.outputs.version }}\n\n"
+
+          if [ -n "$FEAT" ]; then
+            NOTES+="### ✨ Features\n$FEAT\n\n"
+          fi
+          if [ -n "$FIX" ]; then
+            NOTES+="### 🐛 Bug Fixes\n$FIX\n\n"
+          fi
+          if [ -n "$DOCS" ]; then
+            NOTES+="### 📝 Documentation\n$DOCS\n\n"
+          fi
+          if [ -n "$CHORE" ]; then
+            NOTES+="### 🔧 Chores\n$CHORE\n\n"
+          fi
+          if [ -n "$OTHER" ]; then
+            NOTES+="### 📦 Other\n$OTHER\n\n"
+          fi
+
+          # Write to output file (multiline safe)
+          echo -e "$NOTES" > release_notes.md
+          cat release_notes.md
+
+      - name: Download all artifacts
+        if: steps.check-tag.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create tag and release
+        if: steps.check-tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get-version.outputs.version }}
+          name: Release v${{ steps.get-version.outputs.version }}
+          body_path: release_notes.md
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.AppImage
+            artifacts/**/*.tar.gz
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
