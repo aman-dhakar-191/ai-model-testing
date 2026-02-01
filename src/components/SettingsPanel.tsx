@@ -1,4 +1,4 @@
-import { Settings, Eye, EyeOff } from 'lucide-react';
+import { Settings, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
 import { OPENROUTER_MODELS, DEFAULT_SETTINGS } from '../utils/constants';
 import type { ChatSettings, ModelOption } from '../types';
@@ -18,8 +18,20 @@ export default function SettingsPanel({ settings, onChange, open, onToggle, tool
   const [showKey, setShowKey] = useState(false);
   const [ollamaModels, setOllamaModels] = useState<ModelOption[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [currentVersion, setCurrentVersion] = useState<string>('');
+  const [updateCheckMessage, setUpdateCheckMessage] = useState<string>('');
 
   const isOllama = settings.provider === 'ollama';
+
+  // Get current version on mount
+  useEffect(() => {
+    if (window.electron?.updater) {
+      window.electron.updater.getCurrentVersion()
+        .then(setCurrentVersion)
+        .catch(console.error);
+    }
+  }, []);
 
   // Fetch Ollama models when provider changes to Ollama
   useEffect(() => {
@@ -58,6 +70,31 @@ export default function SettingsPanel({ settings, onChange, open, onToggle, tool
       newModel = 'tngtech/deepseek-r1t2-chimera:free';
     }
     onChange({ ...settings, provider, model: newModel });
+  };
+
+  const handleCheckForUpdates = async () => {
+    if (!window.electron?.updater) {
+      setUpdateCheckMessage('Update service not available');
+      setTimeout(() => setUpdateCheckMessage(''), 3000);
+      return;
+    }
+    
+    setCheckingUpdates(true);
+    setUpdateCheckMessage('');
+    try {
+      const hasUpdate = await window.electron.updater.checkForUpdates();
+      if (!hasUpdate) {
+        setUpdateCheckMessage('You are already running the latest version!');
+      } else {
+        setUpdateCheckMessage('Update available! Check the notification.');
+      }
+      setTimeout(() => setUpdateCheckMessage(''), 5000);
+    } catch (err) {
+      setUpdateCheckMessage(err instanceof Error ? err.message : 'Failed to check for updates');
+      setTimeout(() => setUpdateCheckMessage(''), 5000);
+    } finally {
+      setCheckingUpdates(false);
+    }
   };
 
   if (!open) {
@@ -173,6 +210,51 @@ export default function SettingsPanel({ settings, onChange, open, onToggle, tool
           Use this to update old chats with the latest system prompt improvements
         </small>
       </div>
+
+      <div className="settings-divider" />
+
+      {/* Update Check Section */}
+      {window.electron?.updater && (
+        <div className="setting-label">
+          <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontWeight: '500' }}>Application Updates</span>
+            {currentVersion && (
+              <small style={{ color: '#888', fontSize: '0.85em' }}>
+                v{currentVersion}
+              </small>
+            )}
+          </div>
+          <button
+            className="secondary-btn"
+            onClick={handleCheckForUpdates}
+            disabled={checkingUpdates}
+            style={{ 
+              width: '100%', 
+              marginBottom: '0.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}
+            title="Check for application updates"
+          >
+            <RefreshCw size={16} className={checkingUpdates ? 'spinning' : ''} />
+            {checkingUpdates ? 'Checking...' : 'Check for Updates'}
+          </button>
+          {updateCheckMessage && (
+            <small style={{ 
+              color: updateCheckMessage.includes('available') ? '#10b981' : '#888', 
+              fontSize: '0.85em',
+              display: 'block'
+            }}>
+              {updateCheckMessage}
+            </small>
+          )}
+          <small style={{ color: '#888', fontSize: '0.85em' }}>
+            Automatically checks for updates every 6 hours
+          </small>
+        </div>
+      )}
 
       {thinkingGuide}
       {instructionGuide}
