@@ -1,5 +1,5 @@
 {
-  "name": "ai-model-testing",
+  "name": "salesforce-dev-tool",
   "productName": "Saleesforce Dev Tool",
   "private": true,
   "version": "1.0.2",
@@ -51,8 +51,8 @@
     "wait-on": "^9.0.3"
   },
   "build": {
-    "appId": "com.ai-model-testing.app",
-    "productName": "Saleesforce Dev Tool",
+    "appId": "com.salesforce-dev-tool.app",
+    "productName": "SaleesforceDevTool",
     "directories": {
       "output": "release/${version}"
     },
