@@ -106,7 +106,9 @@ The application includes an automatic update system that:
 - **Notifies users** when a new version is available with release notes
 - **Downloads updates** in the background without interrupting your work
 - **Provides control** - you choose when to install updates
-- **Manual checks** - click "Check for Updates" button anytime
+- **Manual checks** - easily check for updates anytime:
+  - Open Settings (⚙️) → "Application Updates" section
+  - Or click the floating "Check for Updates" button (bottom-right)
 
 ### How Updates Work
 
@@ -118,6 +120,8 @@ The application includes an automatic update system that:
 3. Click "Download" to get the update in the background
 4. When ready, click "Restart & Install" to apply the update
 5. The app restarts with the new version
+
+**Manual Check**: Want to check immediately? Open the Settings panel and use the "Check for Updates" button in the "Application Updates" section. You'll see your current version and get instant feedback.
 
 Updates are only checked in production builds. Development builds don't check for updates.
 

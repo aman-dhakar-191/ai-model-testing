@@ -129,6 +129,26 @@ When a new version is pushed:
 
 ## User Experience
 
+### Manual Update Check
+
+Users can manually check for updates in **two ways**:
+
+1. **Settings Panel** (Primary):
+   - Open Settings (⚙️ icon in top-right)
+   - Scroll to "Application Updates" section at the bottom
+   - Click "Check for Updates" button
+   - Visual feedback with spinning icon while checking
+   - Status messages appear below the button:
+     - "You are already running the latest version!" (no update)
+     - "Update available! Check the notification." (update found)
+     - Error messages if check fails
+   - Current version displayed in the section header
+   
+2. **Floating Button** (Secondary):
+   - Located in bottom-right corner
+   - Appears when no update notification is shown
+   - One-click to check for updates
+
 ### Update Available
 When an update is available, users see:
 - A notification in the bottom-right corner
@@ -150,12 +170,8 @@ When ready to install:
 ### No Updates
 When manually checking and no updates are available:
 - Brief message: "You are already running the latest version!"
-- Message auto-dismisses after 3 seconds
-
-### Check for Updates Button
-When no update notification is shown:
-- Floating button in bottom-right corner
-- Click to manually check for updates
+- Message auto-dismisses after 3-5 seconds
+- Displayed in Settings Panel (primary) or as error notification (secondary)
 
 ## Error Handling
 
