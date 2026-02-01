@@ -64,9 +64,8 @@ jobs:
           path: |
             release/**/*.exe
             release/**/*.dmg
-            release/**/*.zip
             release/**/*.AppImage
-            release/**/*.tar.gz
+            !release/**/elevate.exe
           retention-days: 7
 
   # Job 3: Runs after build — creates tag and release from package.json version
