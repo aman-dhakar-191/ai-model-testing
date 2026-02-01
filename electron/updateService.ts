@@ -95,7 +95,9 @@ export class UpdateService {
     try {
       this.isChecking = true;
       const result = await autoUpdater.checkForUpdates();
-      return result !== null && result.updateInfo.version !== autoUpdater.currentVersion.version;
+      return result !== null && 
+             result.updateInfo !== undefined && 
+             result.updateInfo.version !== autoUpdater.currentVersion.version;
     } catch (error) {
       log.error('Error checking for updates:', error);
       return false;
