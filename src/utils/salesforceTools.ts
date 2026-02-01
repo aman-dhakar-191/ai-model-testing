@@ -1,14 +1,21 @@
 import type { ToolDefinition } from '../types';
 import * as path from 'node:path';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import https from 'node:https';
+import http from 'node:http';
 import {
   writeFile,
   readFile,
   listDirectory,
   resolveProjectPath,
   generateApexMetaXml,
+  generateLWCMetaXml,
   generateVFPageMetaXml,
   fileExists,
 } from './fileOperations';
+
+const execAsync = promisify(exec);
 
 /**
  * Salesforce Development Tools
@@ -20,6 +27,7 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
     id: 'sf-create-apex-class',
     name: 'create_apex_class',
     description: 'Creates a Salesforce Apex class file. Supports class, trigger, batch, schedulable, queueable, interface, and test types. Naming convention (not enforced): PascalCase. Test classes should be suffixed with \'Test\'.',
+    instructionFile: 'create-apex-class.md',
     parameters: {
       apex_class_name: {
         type: 'string',
@@ -61,6 +69,7 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
     id: 'sf-create-lwc',
     name: 'create_lwc_component',
     description: 'Creates a Lightning Web Component bundle (HTML, JS, CSS, meta.xml, and optional Apex controller). Naming convention (not enforced): folder kebab-case, JS camelCase.',
+    instructionFile: 'create-lwc-component.md',
     parameters: {
       name: {
         type: 'string',
@@ -74,13 +83,13 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
         type: 'string',
         description: 'JavaScript controller content',
       },
+      is_exposed: {
+        type: 'boolean',
+        description: 'Whether the component should be exposed (isExposed=true in meta.xml). Set to true for components that need to be added to Lightning pages.',
+      },
       css: {
         type: 'string',
         description: 'CSS styles (optional)',
-      },
-      meta_xml: {
-        type: 'string',
-        description: 'js-meta.xml configuration',
       },
       is_create_apex_controller: {
         type: 'boolean',
@@ -103,12 +112,13 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
         description: 'Whether to overwrite existing files if they already exist',
       },
     },
-    required: ['name', 'html', 'javascript', 'meta_xml'],
+    required: ['name', 'html', 'javascript'],
   },
   {
     id: 'sf-create-aura',
     name: 'create_aura_component',
     description: 'Creates an Aura component bundle (cmp, controller, helper, and optional design/renderer). Naming convention (not enforced): PascalCase.',
+    instructionFile: 'create-aura-component.md',
     parameters: {
       name: {
         type: 'string',
@@ -149,6 +159,7 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
     id: 'sf-create-vf-page',
     name: 'create_visualforce_page',
     description: 'Creates a Visualforce page with an optional Apex controller. Naming convention (not enforced): PascalCase.',
+    instructionFile: 'create-visualforce-page.md',
     parameters: {
       page_name: {
         type: 'string',
@@ -185,6 +196,7 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
     id: 'sf-write-file',
     name: 'write_file',
     description: 'Writes content to a file at the given path. Use for metadata, configs, package.xml, docs, or any non-component file.',
+    instructionFile: 'file-operations.md',
     parameters: {
       path: {
         type: 'string',
@@ -209,6 +221,7 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
     id: 'sf-edit-file',
     name: 'edit_file',
     description: 'Edits an existing file. Must be used after read_file unless intentionally replacing the full file.',
+    instructionFile: 'file-operations.md',
     parameters: {
       path: {
         type: 'string',
@@ -238,6 +251,7 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
     id: 'sf-read-file',
     name: 'read_file',
     description: 'Reads the contents of an existing file. Use before modifying to understand current state.',
+    instructionFile: 'file-operations.md',
     parameters: {
       path: {
         type: 'string',
@@ -250,6 +264,7 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
     id: 'sf-list-files',
     name: 'list_files',
     description: 'Lists all files in a given directory. Use to understand project structure before making changes.',
+    instructionFile: 'file-operations.md',
     parameters: {
       directory: {
         type: 'string',
@@ -257,6 +272,81 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
       },
     },
     required: ['directory'],
+  },
+  {
+    id: 'sf-update-todo',
+    name: 'update_todo_list',
+    description: 'Updates the todo list for the current chat. Use this to track tasks, progress, and next steps.',
+    instructionFile: 'update-todo-list.md',
+    parameters: {
+      todos: {
+        type: 'array',
+        description: 'Array of todo items with id, title, and status',
+        items: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Unique identifier for the todo item',
+            },
+            title: {
+              type: 'string',
+              description: 'Title/description of the todo item',
+            },
+            status: {
+              type: 'string',
+              enum: ['pending', 'in-progress', 'completed'],
+              description: 'Current status of the todo item',
+            },
+          },
+          required: ['id', 'title', 'status'],
+        },
+      },
+    },
+    required: ['todos'],
+  },
+  {
+    id: 'sf-execute-command',
+    name: 'execute_command',
+    description: 'Execute shell commands in the project directory. Useful for running npm scripts, git operations, Salesforce CLI commands, and other terminal operations.',
+    instructionFile: 'execute-command.md',
+    parameters: {
+      command: {
+        type: 'string',
+        description: 'The shell command to execute (e.g., npm install, git status, sfdx force:org:list)',
+      },
+      cwd: {
+        type: 'string',
+        description: 'Working directory for the command (defaults to project root if not specified)',
+      },
+    },
+    required: ['command'],
+  },
+  {
+    id: 'sf-web-fetch',
+    name: 'web_fetch',
+    description: 'Fetch content from web URLs. Useful for reading external documentation, calling APIs, or retrieving data from external resources.',
+    instructionFile: 'web-fetch.md',
+    parameters: {
+      url: {
+        type: 'string',
+        description: 'The URL to fetch (must be http or https)',
+      },
+      method: {
+        type: 'string',
+        description: 'HTTP method to use',
+        enum: ['GET', 'POST', 'PUT', 'DELETE'],
+      },
+      headers: {
+        type: 'object',
+        description: 'HTTP headers as key-value pairs',
+      },
+      body: {
+        type: 'string',
+        description: 'Request body for POST/PUT requests',
+      },
+    },
+    required: ['url'],
   },
 ];
 
@@ -300,6 +390,15 @@ export async function executeSalesforceTool(toolName: string, argsJson: string):
 
       case 'list_files':
         return await listFilesHandler(args);
+
+      case 'update_todo_list':
+        return updateTodoListHandler(args);
+
+      case 'execute_command':
+        return await executeCommandHandler(args);
+
+      case 'web_fetch':
+        return await webFetchHandler(args);
 
       default:
         return JSON.stringify({
@@ -409,7 +508,9 @@ async function createLWCComponent(args: any, isDryRun: boolean, overwrite: boole
     if (jsResult.success) filesCreated.push(jsPath);
     else errors.push(jsResult.message);
 
-    const metaResult = writeFile(metaPath, args.meta_xml, overwrite);
+    // Generate meta.xml using template
+    const metaXml = generateLWCMetaXml(args.name, args.is_exposed || false);
+    const metaResult = writeFile(metaPath, metaXml, overwrite);
     if (metaResult.success) filesCreated.push(metaPath);
     else errors.push(metaResult.message);
 
@@ -583,36 +684,62 @@ async function createVisualforcePage(args: any, isDryRun: boolean, overwrite: bo
 }
 
 async function writeFileHandler(args: any, isDryRun: boolean, overwrite: boolean): Promise<string> {
+  const pathArg = args.path || args.file_path;
+  
+  if (!pathArg) {
+    return JSON.stringify({
+      status: 'error',
+      message: 'Missing required parameter: path',
+    });
+  }
+  
+  if (!args.content) {
+    return JSON.stringify({
+      status: 'error',
+      message: 'Missing required parameter: content',
+    });
+  }
+
   if (isDryRun) {
     return JSON.stringify({
       status: 'success',
-      message: `DRY RUN - Would write file: ${args.path}`,
-      file: args.path,
-      files_created: [args.path],
+      message: `DRY RUN - Would write file: ${pathArg}`,
+      file: pathArg,
+      files_created: [pathArg],
       dry_run: true,
     });
   }
 
-  const filePath = resolveProjectPath(args.path);
+  const filePath = resolveProjectPath(pathArg);
   const result = writeFile(filePath, args.content, overwrite);
 
   return JSON.stringify({
     status: result.success ? 'success' : 'error',
-    message: result.success ? `File written successfully: ${args.path}` : result.message,
-    file: args.path,
+    message: result.success ? `File written successfully: ${pathArg}` : result.message,
+    file: pathArg,
     files_created: result.success ? [filePath] : [],
     dry_run: false,
   });
 }
 
 async function editFileHandler(args: any, isDryRun: boolean): Promise<string> {
-  const filePath = resolveProjectPath(args.path);
+  // Handle both 'path' and 'file_path' parameter names for compatibility
+  const pathArg = args.path || args.file_path;
+  
+  if (!pathArg) {
+    return JSON.stringify({
+      status: 'error',
+      message: 'Missing required parameter: path',
+    });
+  }
+  
+  const filePath = resolveProjectPath(pathArg);
 
   if (!fileExists(filePath)) {
     return JSON.stringify({
       status: 'error',
-      message: `File not found: ${args.path}`,
-      file: args.path,
+      message: `File not found: ${pathArg}`,
+      file: pathArg,
     });
   }
 
@@ -621,15 +748,15 @@ async function editFileHandler(args: any, isDryRun: boolean): Promise<string> {
       return JSON.stringify({
         status: 'error',
         message: 'Content is required for replace mode',
-        file: args.path,
+        file: pathArg,
       });
     }
 
     if (isDryRun) {
       return JSON.stringify({
         status: 'success',
-        message: `DRY RUN - Would edit file: ${args.path}`,
-        file: args.path,
+        message: `DRY RUN - Would edit file: ${pathArg}`,
+        file: pathArg,
         mode: args.mode,
         dry_run: true,
       });
@@ -638,8 +765,8 @@ async function editFileHandler(args: any, isDryRun: boolean): Promise<string> {
     const result = writeFile(filePath, args.content, true);
     return JSON.stringify({
       status: result.success ? 'success' : 'error',
-      message: result.success ? `File edited successfully: ${args.path}` : result.message,
-      file: args.path,
+      message: result.success ? `File edited successfully: ${pathArg}` : result.message,
+      file: pathArg,
       mode: args.mode,
       files_modified: result.success ? [filePath] : [],
       dry_run: false,
@@ -648,7 +775,7 @@ async function editFileHandler(args: any, isDryRun: boolean): Promise<string> {
     return JSON.stringify({
       status: 'info',
       message: 'Patch mode requires manual implementation based on patch_instructions',
-      file: args.path,
+      file: pathArg,
       patch_instructions: args.patch_instructions,
       note: 'Please read the file first and provide the full new content in replace mode',
     });
@@ -657,19 +784,28 @@ async function editFileHandler(args: any, isDryRun: boolean): Promise<string> {
   return JSON.stringify({
     status: 'error',
     message: 'Invalid mode. Use "replace" or "patch"',
-    file: args.path,
+    file: pathArg,
   });
 }
 
 async function readFileHandler(args: any): Promise<string> {
-  const filePath = resolveProjectPath(args.path);
+  const pathArg = args.path || args.file_path;
+  
+  if (!pathArg) {
+    return JSON.stringify({
+      status: 'error',
+      message: 'Missing required parameter: path',
+    });
+  }
+  
+  const filePath = resolveProjectPath(pathArg);
   const result = readFile(filePath);
 
   if (result.error) {
     return JSON.stringify({
       status: 'error',
       message: result.error,
-      file: args.path,
+      file: pathArg,
     });
   }
 
@@ -711,5 +847,130 @@ async function listFilesHandler(args: any): Promise<string> {
     directory: args.directory,
     files: result.files,
     count: result.files?.length || 0,
+  });
+}
+
+function updateTodoListHandler(args: any): string {
+  if (!args.todos || !Array.isArray(args.todos)) {
+    return JSON.stringify({
+      status: 'error',
+      message: 'Missing or invalid todos array',
+    });
+  }
+
+  // Validate todo items
+  const validStatuses = ['pending', 'in-progress', 'completed'];
+  for (const todo of args.todos) {
+    if (!todo.id || !todo.title || !todo.status) {
+      return JSON.stringify({
+        status: 'error',
+        message: 'Each todo must have id, title, and status',
+      });
+    }
+    if (!validStatuses.includes(todo.status)) {
+      return JSON.stringify({
+        status: 'error',
+        message: `Invalid status: ${todo.status}. Must be one of: ${validStatuses.join(', ')}`,
+      });
+    }
+  }
+
+  // The actual update will be handled by the App component
+  // This just validates and returns the data
+  return JSON.stringify({
+    status: 'success',
+    message: `Updated ${args.todos.length} todo items`,
+    todos: args.todos.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      createdAt: t.createdAt || Date.now(),
+    })),
+  });
+}
+
+async function executeCommandHandler(args: any): Promise<string> {
+  if (!args.command) {
+    return JSON.stringify({
+      status: 'error',
+      message: 'Missing command parameter',
+    });
+  }
+
+  try {
+    const cwd = args.cwd ? resolveProjectPath(args.cwd) : resolveProjectPath('');
+    const { stdout, stderr } = await execAsync(args.command, { cwd, timeout: 60000 });
+
+    return JSON.stringify({
+      status: 'success',
+      message: 'Command executed successfully',
+      command: args.command,
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+      exit_code: 0,
+    });
+  } catch (error: any) {
+    return JSON.stringify({
+      status: 'error',
+      message: error.message || 'Command execution failed',
+      command: args.command,
+      stdout: error.stdout?.trim() || '',
+      stderr: error.stderr?.trim() || '',
+      exit_code: error.code || 1,
+    });
+  }
+}
+
+async function webFetchHandler(args: any): Promise<string> {
+  if (!args.url) {
+    return JSON.stringify({
+      status: 'error',
+      message: 'Missing url parameter',
+    });
+  }
+
+  const url = new URL(args.url);
+  const isHttps = url.protocol === 'https:';
+  const client = isHttps ? https : http;
+
+  return new Promise((resolve) => {
+    const method = args.method || 'GET';
+    const options = {
+      method,
+      headers: args.headers || {},
+    };
+
+    const req = client.request(url, options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        resolve(JSON.stringify({
+          status: 'success',
+          message: `Fetched ${url.toString()}`,
+          url: args.url,
+          status_code: res.statusCode,
+          headers: res.headers,
+          body: data.substring(0, 10000), // Limit to 10KB
+          body_length: data.length,
+        }));
+      });
+    });
+
+    req.on('error', (error) => {
+      resolve(JSON.stringify({
+        status: 'error',
+        message: error.message,
+        url: args.url,
+      }));
+    });
+
+    if (args.body && (method === 'POST' || method === 'PUT')) {
+      req.write(args.body);
+    }
+
+    req.end();
   });
 }

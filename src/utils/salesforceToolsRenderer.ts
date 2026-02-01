@@ -247,6 +247,78 @@ export const SALESFORCE_TOOLS: ToolDefinition[] = [
     },
     required: ['directory'],
   },
+  {
+    id: 'sf-update-todo',
+    name: 'update_todo_list',
+    description: 'Updates the todo list for the current chat. Use this to track tasks, progress, and next steps.',
+    parameters: {
+      todos: {
+        type: 'array',
+        description: 'Array of todo items with id, title, and status',
+        items: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Unique identifier for the todo item',
+            },
+            title: {
+              type: 'string',
+              description: 'Title/description of the todo item',
+            },
+            status: {
+              type: 'string',
+              enum: ['pending', 'in-progress', 'completed'],
+              description: 'Current status of the todo item',
+            },
+          },
+          required: ['id', 'title', 'status'],
+        },
+      },
+    },
+    required: ['todos'],
+  },
+  {
+    id: 'sf-execute-command',
+    name: 'execute_command',
+    description: 'Execute a shell command in the project directory. Use for running scripts, npm commands, git operations, etc. Returns stdout and stderr.',
+    parameters: {
+      command: {
+        type: 'string',
+        description: 'The shell command to execute (e.g., "npm install", "git status")',
+      },
+      cwd: {
+        type: 'string',
+        description: 'Working directory for the command (optional, defaults to project root)',
+      },
+    },
+    required: ['command'],
+  },
+  {
+    id: 'sf-web-fetch',
+    name: 'web_fetch',
+    description: 'Fetch content from a web URL. Useful for reading documentation, APIs, or external resources.',
+    parameters: {
+      url: {
+        type: 'string',
+        description: 'The URL to fetch (must be http or https)',
+      },
+      method: {
+        type: 'string',
+        description: 'HTTP method to use',
+        enum: ['GET', 'POST', 'PUT', 'DELETE'],
+      },
+      headers: {
+        type: 'object',
+        description: 'Optional HTTP headers as key-value pairs',
+      },
+      body: {
+        type: 'string',
+        description: 'Request body (for POST/PUT)',
+      },
+    },
+    required: ['url'],
+  },
 ];
 
 /**

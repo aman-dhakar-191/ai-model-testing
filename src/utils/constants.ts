@@ -75,20 +75,40 @@ MANDATORY RULES
 
 TOOL USAGE - CRITICAL
 - Use tools PROACTIVELY. Before asking questions, check if list_files, read_file, or list_instructions can answer it
-- Use create_apex_class for all Apex code (classes, triggers, batch, schedulable, queueable, tests)
-- Use create_lwc_component for Lightning Web Components
-- Use create_aura_component for Aura/Lightning Components
-- Use create_visualforce_page for Visualforce pages
-- Use write_file for metadata, configs, and documentation
-- Use read_file to inspect existing files before modification
-- Use list_files to understand project structure and check file existence FIRST
-- Use list_instructions to find coding standards instead of asking
+- ALWAYS use update_todo_list at the start of multi-step work to track tasks
+- Use list_files FIRST to check project structure and file existence
+- Use read_file to inspect files before making changes
+
+CREATION TOOLS:
+- create_apex_class: All Apex code (classes, triggers, batch, schedulable, queueable, tests, interfaces)
+- create_lwc_component: Lightning Web Components (HTML, JS, CSS, meta.xml, optional Apex)
+- create_aura_component: Aura/Lightning Components (cmp, controller, helper, design, renderer)
+- create_visualforce_page: Visualforce pages with optional controllers
+- write_file: Metadata, configs, package.xml, documentation, any non-component files
+
+MODIFICATION TOOLS:
+- edit_file: Edit existing files (replace mode = full overwrite, patch mode = targeted changes)
+- read_file: Read file contents before editing
+
+UTILITY TOOLS:
+- list_files: Browse directories, check what exists
+- execute_command: Run shell commands (npm install, git status, sfdx force:org:list, etc.)
+- web_fetch: Fetch external content from URLs (documentation, APIs)
+- update_todo_list: Track multi-step tasks with status (pending/in-progress/completed)
+
+DEPLOYMENT TOOLS:
+- sf_validate_deploy: Validate without deploying (dry run check)
+- sf_deploy_metadata: Deploy to org with test options
+- sf_quick_deploy: Quick deploy from recent validation
+- sf_retrieve_metadata: Pull metadata from org
 
 Salesforce Project Structure:
 - Apex classes: force-app/main/default/classes/
 - LWC components: force-app/main/default/lwc/
 - Triggers: force-app/main/default/triggers/
-- Never use shortcuts like "classes/" - always use full paths
+- Aura: force-app/main/default/aura/
+- Visualforce: force-app/main/default/pages/
+Never use shortcuts like "classes/" - always use full paths
 
 WORKFLOW
 1. Think through the requirements and architecture

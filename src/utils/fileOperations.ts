@@ -130,6 +130,34 @@ export function generateApexMetaXml(): string {
 }
 
 /**
+ * Generates LWC component metadata XML
+ */
+export function generateLWCMetaXml(
+  _componentName: string,
+  isExposed: boolean = false,
+  targets?: string[]
+): string {
+  const defaultTargets = targets || ['lightning__AppPage', 'lightning__RecordPage', 'lightning__HomePage'];
+  
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>61.0</apiVersion>
+    <isExposed>${isExposed}</isExposed>`;
+  
+  if (isExposed) {
+    xml += '\n    <targets>';
+    defaultTargets.forEach(target => {
+      xml += `\n        <target>${target}</target>`;
+    });
+    xml += '\n    </targets>';
+  }
+  
+  xml += '\n</LightningComponentBundle>';
+  
+  return xml;
+}
+
+/**
  * Generates Visualforce page metadata XML
  */
 export function generateVFPageMetaXml(pageName: string): string {

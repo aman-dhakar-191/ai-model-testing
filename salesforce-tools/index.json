@@ -54,5 +54,26 @@
     "filename": "list-files.md",
     "title": "List Files Tool",
     "description": "Lists all files and directories in a given path - use to understand project structure"
+  },
+  {
+    "id": "execute-command",
+    "name": "execute_command",
+    "filename": "execute-command.md",
+    "title": "Execute Command Tool",
+    "description": "Execute shell commands in the project directory (npm, git, sfdx, scripts)"
+  },
+  {
+    "id": "web-fetch",
+    "name": "web_fetch",
+    "filename": "web-fetch.md",
+    "title": "Web Fetch Tool",
+    "description": "Fetch content from web URLs - useful for reading docs, APIs, or external resources"
+  },
+  {
+    "id": "update-todo-list",
+    "name": "update_todo_list",
+    "filename": "update-todo-list.md",
+    "title": "Update Todo List Tool",
+    "description": "Create and update task lists to track progress on multi-step work"
   }
 ]

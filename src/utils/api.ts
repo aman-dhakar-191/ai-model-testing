@@ -1,5 +1,6 @@
 import type { Message, ChatSettings, ToolDefinition, ToolCall } from '../types';
 import { toolDefinitionsToApiFormat } from './mockTools';
+import { toolInstructionLoader } from './toolInstructions';
 
 export interface ApiResponse {
   content: string | null;
@@ -37,14 +38,100 @@ interface ApiMessage {
   tool_calls?: ToolCall[];
 }
 
-function buildApiMessages(messages: Message[], settings: ChatSettings): ApiMessage[] {
+async function getEnvironmentContext(tools?: ToolDefinition[]): Promise<string> {
+  try {
+    if (typeof window === 'undefined' || !window.electron?.salesforce) {
+      return '';
+    }
+
+    const workingDir = await window.electron.salesforce.getWorkingDirectory();
+    const fileTreeJson = await window.electron.salesforce.getFileTree();
+    const fileTree = JSON.parse(fileTreeJson);
+    
+    // Get connected org info
+    let orgInfo = 'Not connected';
+    try {
+      const currentOrg = await window.electron.sfCli.getCurrentOrg();
+      if (currentOrg && currentOrg.username) {
+        orgInfo = currentOrg.alias 
+          ? `${currentOrg.alias} (${currentOrg.username})` 
+          : currentOrg.username;
+      }
+    } catch (error) {
+      // Org might not be connected, use default message
+      orgInfo = 'Not connected';
+    }
+    
+    // Create a simplified file structure for context (limit depth to avoid too much data)
+    const simplifyFileTree = (items: any[], depth = 0, maxDepth = 3): string => {
+      if (depth >= maxDepth || !items || items.length === 0) return '';
+      
+      return items
+        .filter(item => {
+          // Filter out node_modules, .git, and other common large directories
+          const name = item.name || '';
+          return !name.startsWith('.') && 
+                 name !== 'node_modules' && 
+                 name !== 'coverage' &&
+                 name !== 'dist' &&
+                 name !== 'build';
+        })
+        .map(item => {
+          const indent = '  '.repeat(depth);
+          const prefix = item.type === 'directory' ? '📁' : '📄';
+          const line = `${indent}${prefix} ${item.name}`;
+          
+          if (item.type === 'directory' && item.children) {
+            const children = simplifyFileTree(item.children, depth + 1, maxDepth);
+            return children ? `${line}\n${children}` : line;
+          }
+          return line;
+        })
+        .join('\n');
+    };
+
+    const fileStructure = simplifyFileTree(fileTree);
+    
+    let context = `\n\n---\n**Environment Context:**\n- Working Directory: ${workingDir}\n- Connected Org: ${orgInfo}\n- Project Structure:\n${fileStructure}`;
+    
+    // Add available tools list
+    if (tools && tools.length > 0) {
+      context += `\n\n**Available Tools:**\n`;
+      tools.forEach(tool => {
+        context += `- ${tool.name}: ${tool.description}\n`;
+      });
+      context += `\n(Use these tools when needed to accomplish tasks)`;
+    }
+    
+    context += `\n---\n`;
+    
+    return context;
+  } catch (error) {
+    console.error('Failed to get environment context:', error);
+    return '';
+  }
+}
+
+async function buildApiMessagesWithContext(messages: Message[], settings: ChatSettings, tools?: ToolDefinition[]): Promise<ApiMessage[]> {
   const apiMessages: ApiMessage[] = [];
 
   if (settings.systemPrompt) {
     apiMessages.push({ role: 'system', content: settings.systemPrompt });
   }
 
-  for (const msg of messages) {
+  const envContext = await getEnvironmentContext(tools);
+  
+  // Find the index of the last user message
+  let lastUserMessageIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      lastUserMessageIndex = i;
+      break;
+    }
+  }
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
     if (msg.role === 'system') continue;
 
     if (msg.role === 'tool') {
@@ -62,6 +149,23 @@ function buildApiMessages(messages: Message[], settings: ChatSettings): ApiMessa
           ...tc,
           type: tc.type || 'function',
         })),
+      });
+    } else if (msg.role === 'user') {
+      // Remove any existing context from previous user messages
+      let content = msg.content;
+      const contextMarker = '\n\n---\n**Environment Context:**';
+      if (content.includes(contextMarker)) {
+        content = content.split(contextMarker)[0].trim();
+      }
+      
+      // Only add context to the LAST user message
+      if (i === lastUserMessageIndex && envContext) {
+        content = content + envContext;
+      }
+      
+      apiMessages.push({ 
+        role: msg.role, 
+        content
       });
     } else {
       apiMessages.push({ role: msg.role, content: msg.content });
@@ -86,6 +190,32 @@ function buildRequestBody(
 
   if (tools && tools.length > 0) {
     body.tools = toolDefinitionsToApiFormat(tools);
+  }
+
+  if (stream) {
+    body.stream = true;
+  }
+
+  return body;
+}
+
+async function buildRequestBodyWithInstructions(
+  apiMessages: ApiMessage[],
+  settings: ChatSettings,
+  tools?: ToolDefinition[],
+  stream?: boolean,
+): Promise<Record<string, unknown>> {
+  // Use OpenAI-compatible format for both Ollama and OpenRouter
+  const body: Record<string, unknown> = {
+    model: settings.model,
+    messages: apiMessages,
+    temperature: settings.temperature,
+  };
+
+  if (tools && tools.length > 0) {
+    // Enrich tool descriptions with detailed instructions
+    const enrichedTools = await toolInstructionLoader.enrichToolDefinitions(tools);
+    body.tools = toolDefinitionsToApiFormat(enrichedTools);
   }
 
   if (stream) {
@@ -230,8 +360,8 @@ export async function sendMessage(
     throw new Error('Please enter your OpenRouter API key in the settings panel.');
   }
 
-  const apiMessages = buildApiMessages(messages, settings);
-  const body = buildRequestBody(apiMessages, settings, tools, false);
+  const apiMessages = await buildApiMessagesWithContext(messages, settings, tools);
+  const body = await buildRequestBodyWithInstructions(apiMessages, settings, tools, false);
   const response = await fetchApi(body, settings);
   const data = await response.json();
   
@@ -256,9 +386,9 @@ export async function sendMessageStreaming(
     throw new Error('Please enter your OpenRouter API key in the settings panel.');
   }
 
-  const apiMessages = buildApiMessages(messages, settings);
+  const apiMessages = await buildApiMessagesWithContext(messages, settings, tools);
   const hasTools = tools && tools.length > 0;
-  const body = buildRequestBody(apiMessages, settings, tools, true);
+  const body = await buildRequestBodyWithInstructions(apiMessages, settings, tools, true);
   const response = await fetchApi(body, settings, signal);
 
   const reader = response.body?.getReader();

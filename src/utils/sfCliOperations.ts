@@ -33,7 +33,15 @@ async function executeSfCommand(command: string): Promise<{ stdout: string; stde
     });
     return result;
   } catch (error: any) {
-    throw new Error(`SF CLI Error: ${error.message}\nStderr: ${error.stderr}`);
+    // For commands with --json flag, stdout may contain valid JSON even on error
+    // Return stdout/stderr instead of throwing, let caller parse the JSON
+    if (error.stdout || error.stderr) {
+      return {
+        stdout: error.stdout || '',
+        stderr: error.stderr || '',
+      };
+    }
+    throw new Error(`SF CLI Error: ${error.message}`);
   }
 }
 
@@ -204,11 +212,21 @@ export async function validateDeploy(
   const testLevelFlag = `--test-level ${testLevel}`;
   const testsFlag = tests && tests.length > 0 ? `--tests ${tests.join(',')}` : '';
   
-  const command = `sf project deploy start --source-dir "${sourcePath}" ${targetFlag} ${testLevelFlag} ${testsFlag} --dry-run --json`;
+  const command = `sf project deploy start --source-dir ${sourcePath} ${targetFlag} ${testLevelFlag} ${testsFlag} --dry-run --json`;
   
   try {
-    const { stdout } = await executeSfCommand(command);
-    const result = JSON.parse(stdout);
+    const { stdout, stderr } = await executeSfCommand(command);
+    
+    let result;
+    try {
+      result = JSON.parse(stdout);
+    } catch (parseError) {
+      return {
+        success: false,
+        message: 'Failed to parse SF CLI response. Check if the source path exists and is valid.',
+        details: { stdout, stderr },
+      };
+    }
     
     if (result.status === 0) {
       return {
@@ -217,16 +235,21 @@ export async function validateDeploy(
         details: result.result,
       };
     } else {
+      let errorMsg = result.message || 'Validation failed';
+      if (result.name === 'SfError' && result.message) {
+        errorMsg = result.message;
+      }
       return {
         success: false,
-        message: result.message || 'Validation failed',
+        message: errorMsg,
         details: result,
       };
     }
   } catch (error: any) {
     return {
       success: false,
-      message: `Validation error: ${error.message}`,
+      message: `Validation error: ${error.message || 'Unknown error'}`,
+      details: { error: error.message },
     };
   }
 }
@@ -246,11 +269,23 @@ export async function deployMetadata(
   const testsFlag = tests && tests.length > 0 ? `--tests ${tests.join(',')}` : '';
   const checkOnlyFlag = checkOnly ? '--dry-run' : '';
   
-  const command = `sf project deploy start --source-dir "${sourcePath}" ${targetFlag} ${testLevelFlag} ${testsFlag} ${checkOnlyFlag} --json`;
+  const command = `sf project deploy start --source-dir ${sourcePath} ${targetFlag} ${testLevelFlag} ${testsFlag} ${checkOnlyFlag} --json`;
   
   try {
-    const { stdout } = await executeSfCommand(command);
-    const result = JSON.parse(stdout);
+    const { stdout, stderr } = await executeSfCommand(command);
+    
+    // Parse JSON response (SF CLI returns JSON even on errors with --json flag)
+    let result;
+    try {
+      result = JSON.parse(stdout);
+    } catch (parseError) {
+      // If JSON parsing fails, return a descriptive error
+      return {
+        success: false,
+        message: 'Failed to parse SF CLI response. Check if the source path exists and is valid.',
+        details: { stdout, stderr },
+      };
+    }
     
     if (result.status === 0) {
       return {
@@ -260,46 +295,25 @@ export async function deployMetadata(
         details: result.result,
       };
     } else {
+      // Extract meaningful error message
+      let errorMsg = result.message || 'Deployment failed';
+      
+      // If there's an error object with more details, use that
+      if (result.name === 'SfError' && result.message) {
+        errorMsg = result.message;
+      }
+      
       return {
         success: false,
-        message: result.message || 'Deployment failed',
+        message: errorMsg,
         details: result,
       };
     }
   } catch (error: any) {
-    // Keep the full error but try to extract the meaningful part
-    let errorMessage = error.message || 'Unknown deployment error';
-    let fullOutput = errorMessage; // Keep full output for details
-    
-    // Try to extract the actual SF CLI JSON error if present
-    try {
-      const stderrMatch = errorMessage.match(/Stderr:\s*([\s\S]+)$/);
-      if (stderrMatch) {
-        const stderr = stderrMatch[1];
-        // Remove common warnings but keep the actual error
-        const cleanedStderr = stderr
-          .replace(/Warning: Could not find typescript[\s\S]*?Falling back to compiled source\.\n/g, '')
-          .replace(/\(node:\d+\) Error Plugin[\s\S]*?See more details with DEBUG=\*\n/g, '')
-          .replace(/Warning: @salesforce\/cli update available[\s\S]*?\n/g, '')
-          .trim();
-        
-        if (cleanedStderr) {
-          errorMessage = `Deployment failed: ${cleanedStderr}`;
-        }
-      }
-    } catch {
-      // If parsing fails, use original message
-    }
-    
-    // If message is empty after filtering, use generic error
-    if (!errorMessage || errorMessage === 'SF CLI Error: Command failed:') {
-      errorMessage = 'Deployment failed. Run "sf project deploy start" manually in terminal to see full error details.';
-    }
-    
     return {
       success: false,
-      message: errorMessage,
-      details: { fullOutput }, // Include full output in details
+      message: `Deployment error: ${error.message || 'Unknown error'}`,
+      details: { error: error.message },
     };
   }
 }
@@ -347,7 +361,7 @@ export async function retrieveMetadata(
   targetOrg?: string
 ): Promise<{ success: boolean; message: string; details?: any }> {
   const targetFlag = `--target-org ${targetOrg || 'default'}`;
-  const command = `sf project retrieve start --source-dir "${sourcePath}" ${targetFlag} --json`;
+  const command = `sf project retrieve start --source-dir ${sourcePath} ${targetFlag} --json`;
   
   try {
     const { stdout } = await executeSfCommand(command);

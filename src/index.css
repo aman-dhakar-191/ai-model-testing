@@ -58,6 +58,30 @@ body {
   overflow: hidden;
 }
 
+/* ===== Workspace Panel ===== */
+.workspace-panel {
+  width: 280px;
+  min-width: 280px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-panel-explorer {
+  flex: 1;
+  min-height: 0;
+}
+
+.workspace-panel-explorer .file-explorer {
+  width: 100%;
+  min-width: 0;
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+  height: 100%;
+}
+
 .sidebar-header {
   display: flex;
   align-items: center;
@@ -339,6 +363,51 @@ body {
   border-radius: 12px;
   color: var(--text-secondary);
   border: 1px solid var(--border);
+}
+
+.chat-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+}
+
+.chat-selector label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.chat-selector select {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  min-width: 160px;
+  max-width: 200px;
+  outline: none;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.chat-selector select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 8px;
+}
+
+.chat-selector select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chat-selector .icon-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 
 .header-right {
@@ -2303,6 +2372,143 @@ Recent Projects Dropdown */
   font-size: 13px;
   margin: 0 20px 16px 20px;
   line-height: 1.4;
+}
+
+/* ===== Todo List ===== */
+.todo-list {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding: 12px;
+  margin: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.todo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0;
+  padding: 8px;
+  border: none;
+  background: none;
+  width: 100%;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: var(--transition);
+  border-radius: var(--radius-sm);
+}
+
+.todo-header:hover {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  max-height: 340px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.todo-header h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.todo-count {
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.todo-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.todo-empty {
+  margin-top: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--border);
+  transition: var(--transition);
+}
+
+.todo-item:hover {
+  background: var(--bg-hover);
+}
+
+.todo-item.todo-pending {
+  border-left-color: var(--text-secondary);
+}
+
+.todo-item.todo-in-progress {
+  border-left-color: #3b82f6;
+}
+
+.todo-item.todo-completed {
+  border-left-color: var(--success);
+  opacity: 0.7;
+}
+
+.todo-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.todo-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-title {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.todo-item.todo-completed .todo-title {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+.todo-status {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+  margin-top: 2px;
+}
+
+.todo-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 /* ===== Responsive ===== */

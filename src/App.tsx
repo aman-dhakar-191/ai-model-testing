@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, RotateCcw, StopCircle } from 'lucide-react';
-import Sidebar from './components/Sidebar';
+import type { ChangeEvent } from 'react';
+import { Bot, RotateCcw, StopCircle, Plus, Trash2 } from 'lucide-react';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import SettingsPanel from './components/SettingsPanel';
@@ -9,10 +9,10 @@ import ToolEditor from './components/ToolEditor';
 import ToolGuide from './components/ToolGuide';
 import ThinkingGuide from './components/ThinkingGuide';
 import FetchInstructionGuide from './components/FetchInstructionGuide';
-import WorkingDirectory from './components/WorkingDirectory';
 import SalesforceOrgManager from './components/SalesforceOrgManager';
 import ProjectSetupModal from './components/ProjectSetupModal';
 import FileExplorer from './components/FileExplorer';
+import TodoList from './components/TodoList';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { sendMessageStreaming } from './utils/api';
 import { executeMockTool } from './utils/mockTools';
@@ -128,6 +128,14 @@ export default function App() {
     }
   };
 
+  const handleChatSelectChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const selectedId = event.target.value;
+    if (!selectedId || selectedId === activeChatId) {
+      return;
+    }
+    handleSelectChat(selectedId);
+  };
+
   const handleSelectChat = (id: string) => {
     setActiveChatId(id);
     setError(null);
@@ -226,6 +234,19 @@ export default function App() {
               }
             } else if (isSalesforceTool(call.function.name)) {
               result = await executeSalesforceTool(call.function.name, call.function.arguments);
+              
+              // Handle todo list updates
+              if (call.function.name === 'update_todo_list') {
+                try {
+                  const parsed = JSON.parse(result);
+                  if (parsed.status === 'success' && parsed.todos) {
+                    updateChat(activeChat.id, (c) => ({
+                      ...c,
+                      todos: parsed.todos,
+                    }));
+                  }
+                } catch { /* ignore parse errors */ }
+              }
             } else if (isDeployTool(call.function.name)) {
               result = await executeDeployTool(call.function.name, call.function.arguments);
             } else {
@@ -318,18 +339,17 @@ export default function App() {
   };
 
   const displayChat = chats.find((c) => c.id === activeChatId) ?? null;
+  const sortedChats = [...chats].sort((a, b) => b.updatedAt - a.updatedAt);
   const resultsMap = new Map(Object.entries(toolResultsMap));
 
   return (
     <div className="app">
-      <Sidebar
-        chats={chats}
-        activeChatId={activeChatId}
-        onSelect={handleSelectChat}
-        onNew={handleNewChat}
-        onDelete={handleDeleteChat}
-      />
-      <FileExplorer />
+      <aside className="workspace-panel">
+        <div className="workspace-panel-explorer">
+          <FileExplorer />
+        </div>
+        <TodoList todos={displayChat?.todos ?? []} />
+      </aside>
       <main className="main-area">
         <header className="main-header">
           <div className="header-left">
@@ -339,6 +359,36 @@ export default function App() {
                 {displayChat.settings.model.split('/').pop()}
               </span>
             )}
+            <div className="chat-selector">
+              <label htmlFor="chat-select">Chats</label>
+              <select
+                id="chat-select"
+                value={activeChatId ?? ''}
+                onChange={handleChatSelectChange}
+                disabled={sortedChats.length === 0}
+              >
+                <option value="">
+                  {sortedChats.length === 0 ? 'No chats yet' : 'Select chat'}
+                </option>
+                {sortedChats.map((chat) => (
+                  <option key={chat.id} value={chat.id}>
+                    {chat.title}
+                  </option>
+                ))}
+              </select>
+              <button className="icon-btn" onClick={handleNewChat} title="New chat">
+                <Plus size={16} />
+              </button>
+              {activeChatId && (
+                <button
+                  className="icon-btn"
+                  onClick={() => handleDeleteChat(activeChatId)}
+                  title="Delete chat"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
           </div>
           <div className="header-right">
             <SalesforceOrgManager />

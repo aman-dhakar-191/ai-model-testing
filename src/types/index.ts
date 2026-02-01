@@ -17,6 +17,14 @@ export interface Chat {
   createdAt: number;
   updatedAt: number;
   settings: ChatSettings;
+  todos?: TodoItem[];
+}
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  status: 'pending' | 'in-progress' | 'completed';
+  createdAt: number;
 }
 
 export interface ChatSettings {
@@ -38,6 +46,7 @@ export interface ToolParameter {
   type: string;
   description: string;
   enum?: string[];
+  items?: any;
 }
 
 export interface ToolDefinition {
@@ -46,6 +55,7 @@ export interface ToolDefinition {
   description: string;
   parameters: Record<string, ToolParameter>;
   required: string[];
+  instructionFile?: string; // Optional: filename of detailed markdown instructions
 }
 
 export interface ToolCall {
