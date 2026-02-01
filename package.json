@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@salesforce/cli": "^2.70.9",
+    "electron-log": "^5.4.3",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -37,6 +38,7 @@
     "cross-env": "^10.1.0",
     "electron": "^40.1.0",
     "electron-builder": "^26.4.0",
+    "electron-updater": "^6.7.3",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -58,6 +60,11 @@
       "dist",
       "dist-electron"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "aman-dhakar-191",
+      "repo": "ai-model-testing"
+    },
     "mac": {
       "target": [
         "dmg",
