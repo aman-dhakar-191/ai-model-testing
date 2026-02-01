@@ -13,6 +13,7 @@ import SalesforceOrgManager from './components/SalesforceOrgManager';
 import ProjectSetupModal from './components/ProjectSetupModal';
 import FileExplorer from './components/FileExplorer';
 import TodoList from './components/TodoList';
+import { UpdateNotification } from './components/UpdateNotification';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { DatabaseService } from './services/DatabaseService';
 import { sendMessageStreaming } from './utils/api';
@@ -599,6 +600,7 @@ export default function App() {
           }} 
         />
       )}
+      <UpdateNotification />
     </div>
   );
 }

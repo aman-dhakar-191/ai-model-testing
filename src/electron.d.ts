@@ -23,6 +23,17 @@ export interface FileTreeItem {
   extension?: string;
 }
 
+export interface UpdateInfo {
+  version: string;
+  releaseDate: string;
+  releaseNotes?: string;
+}
+
+export interface UpdateStatus {
+  event: 'checking-for-update' | 'update-available' | 'update-not-available' | 'update-error' | 'download-progress' | 'update-downloaded';
+  data?: any;
+}
+
 export interface ElectronAPI {
   salesforce: {
     executeTool: (toolName: string, argsJson: string) => Promise<string>;
@@ -72,6 +83,14 @@ export interface ElectronAPI {
     setAppSetting: (key: string, value: string) => Promise<void>;
     getStats: () => Promise<any>;
     vacuum: () => Promise<void>;
+  };
+  updater: {
+    checkForUpdates: () => Promise<boolean>;
+    downloadUpdate: () => Promise<void>;
+    installUpdate: () => Promise<void>;
+    getCurrentVersion: () => Promise<string>;
+    getLatestRelease: () => Promise<UpdateInfo | null>;
+    onUpdateStatus: (callback: (status: UpdateStatus) => void) => void;
   };
   send: (channel: string, data: unknown) => void;
   receive: (channel: string, func: (...args: unknown[]) => void) => void;

@@ -67,6 +67,18 @@ contextBridge.exposeInMainWorld('electron', {
     vacuum: () => ipcRenderer.invoke('db-vacuum'),
   },
   
+  // Update service operations
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('update-check'),
+    downloadUpdate: () => ipcRenderer.invoke('update-download'),
+    installUpdate: () => ipcRenderer.invoke('update-install'),
+    getCurrentVersion: () => ipcRenderer.invoke('update-get-version'),
+    getLatestRelease: () => ipcRenderer.invoke('update-get-latest-release'),
+    onUpdateStatus: (callback: (status: any) => void) => {
+      ipcRenderer.on('update-status', (_event, status) => callback(status));
+    },
+  },
+  
   // Example: Send message to main process
   send: (channel: string, data: unknown) => {
     // Whitelist channels
@@ -77,7 +89,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
   // Example: Receive message from main process
   receive: (channel: string, func: (...args: unknown[]) => void) => {
-    const validChannels = ['fromMain', 'main-process-message'];
+    const validChannels = ['fromMain', 'main-process-message', 'update-status'];
     if (validChannels.includes(channel)) {
       // Deliberately strip event as it includes `sender`
       ipcRenderer.on(channel, (event, ...args) => func(...args));

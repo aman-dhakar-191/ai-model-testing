@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -21,6 +21,7 @@ import {
   retrieveMetadata,
 } from '../src/utils/sfCliOperations';
 import { DatabaseService } from './database';
+import { UpdateService } from './updateService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,6 +73,7 @@ process.env.VITE_PUBLIC = app.isPackaged
 
 let win: BrowserWindow | null;
 let database: DatabaseService;
+let updateService: UpdateService;
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 const DIST = process.env.DIST!;
 const VITE_PUBLIC = process.env.VITE_PUBLIC!;
@@ -331,7 +333,24 @@ app.whenReady().then(() => {
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
   }
   
+  // Initialize update service
+  try {
+    updateService = new UpdateService();
+    console.log('Update service initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize update service:', error);
+  }
+  
   createWindow();
+  
+  // Set main window for update service and start auto-check
+  if (win && updateService) {
+    updateService.setMainWindow(win);
+    // Only check for updates in production
+    if (app.isPackaged) {
+      updateService.startAutoUpdateCheck(6); // Check every 6 hours
+    }
+  }
 });
 
 // Database IPC Handlers
@@ -425,4 +444,60 @@ ipcMain.handle('db-get-stats', async () => {
 
 ipcMain.handle('db-vacuum', async () => {
   database.vacuum();
+});
+
+// IPC handlers for Update Service
+ipcMain.handle('update-check', async () => {
+  try {
+    if (!updateService) {
+      throw new Error('Update service not initialized');
+    }
+    return await updateService.checkForUpdates();
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('Failed to check for updates');
+  }
+});
+
+ipcMain.handle('update-download', async () => {
+  try {
+    if (!updateService) {
+      throw new Error('Update service not initialized');
+    }
+    await updateService.downloadUpdate();
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('Failed to download update');
+  }
+});
+
+ipcMain.handle('update-install', async () => {
+  try {
+    if (!updateService) {
+      throw new Error('Update service not initialized');
+    }
+    updateService.quitAndInstall();
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('Failed to install update');
+  }
+});
+
+ipcMain.handle('update-get-version', async () => {
+  try {
+    if (!updateService) {
+      throw new Error('Update service not initialized');
+    }
+    return updateService.getCurrentVersion();
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('Failed to get version');
+  }
+});
+
+ipcMain.handle('update-get-latest-release', async () => {
+  try {
+    if (!updateService) {
+      throw new Error('Update service not initialized');
+    }
+    return await updateService.getLatestReleaseInfo();
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('Failed to get latest release info');
+  }
 });
